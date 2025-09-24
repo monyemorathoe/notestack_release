@@ -1,0 +1,5 @@
+package com.example.notestack
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()

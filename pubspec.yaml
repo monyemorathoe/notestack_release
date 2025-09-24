@@ -1,0 +1,39 @@
+name: notestack
+description: A modern notepad app.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  sqflite: ^2.3.3 # For Android/iOS
+  sqflite_common_ffi: ^2.3.3 # For Windows/Linux/macOS
+  provider: ^6.1.2
+  animate_do: ^3.3.4
+  intl: ^0.20.2
+  google_fonts: ^6.2.1
+  uuid: ^4.5.0
+  path: ^1.9.0 # Added path dependency
+  flutter_secure_storage: ^9.0.0
+  encrypt: ^5.0.1
+  crypto: ^3.0.3
+  flutter_staggered_grid_view: ^0.7.0 # Added staggered grid view
+  shared_preferences: ^2.2.3 # Or latest version
+  flutter_speed_dial: ^7.0.0
+  path_provider: ^2.0.0
+  table_calendar: ^3.0.8
+  permission_handler: ^11.3.1
+  desktop_window: ^0.4.2
+  share_plus: ^12.0.0 # Added share_plus
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
