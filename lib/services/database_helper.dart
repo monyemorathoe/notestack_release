@@ -92,7 +92,10 @@ class DatabaseHelper {
 
   Future<List<Note>> getNotes() async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('notes');
+    final List<Map<String, dynamic>> maps = await db.query(
+      'notes',
+      orderBy: 'createdAt ASC', // Ensures new notes are last
+    );
     if (maps.isEmpty) {
       return [];
     }

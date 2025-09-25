@@ -28,6 +28,7 @@ class NoteScreenState extends State<NoteScreen> {
   DateTime? _createdAt;
   bool _isLocked = false;
   bool _isTemporarilyUnlocked = false;
+  bool _showToolbar = true;
 
   // Predefined Material colors for the picker
   final List<Color> _defaultColors = [
@@ -344,12 +345,34 @@ class NoteScreenState extends State<NoteScreen> {
               ? _buildLockedState(theme)
               : Column(
                   children: [
-                    if (isEditable) QuillSimpleToolbar(
-                      controller: _quillController,
-                      config: const QuillSimpleToolbarConfig(
-                        showBackgroundColorButton: false, // Disable background color tool
+                    if (isEditable)
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(_showToolbar ? Icons.expand_less : Icons.expand_more),
+                            tooltip: _showToolbar ? 'Hide toolbar' : 'Show toolbar',
+                            onPressed: () {
+                              setState(() {
+                                _showToolbar = !_showToolbar;
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          Text('Formatting', style: Theme.of(context).textTheme.labelLarge),
+                        ],
                       ),
-                    ),
+                    if (isEditable)
+                      AnimatedCrossFade(
+                        firstChild: QuillSimpleToolbar(
+                          controller: _quillController,
+                          config: const QuillSimpleToolbarConfig(
+                            showBackgroundColorButton: false,
+                          ),
+                        ),
+                        secondChild: const SizedBox.shrink(),
+                        crossFadeState: _showToolbar ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+                        duration: const Duration(milliseconds: 200),
+                      ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _titleController,
