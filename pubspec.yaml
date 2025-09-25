@@ -9,6 +9,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
   cupertino_icons: ^1.0.8
   sqflite: ^2.3.3 # For Android/iOS
   sqflite_common_ffi: ^2.3.3 # For Windows/Linux/macOS
