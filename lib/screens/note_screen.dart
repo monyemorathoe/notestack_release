@@ -435,7 +435,7 @@ class NoteScreenState extends State<NoteScreen> {
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Text(
                   'Created: ${_formatDateTime(_createdAt)}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withOpacity(0.6)),
+                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).round())),
                 ),
               ),
             ],
