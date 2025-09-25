@@ -1,6 +1,5 @@
 import 'dart:async'; // Added for Timer
 import 'dart:io'; // Added for Platform check
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
@@ -588,7 +587,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                                 const SizedBox(height: 16),
                                 const Text(
-                                  'To use the lock feature, you first need to set an application password. Would you like to set one now?',
+                                  'To use the lock feature, you first need to set an application password',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Colors.grey),
                                 ),
