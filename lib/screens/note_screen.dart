@@ -346,7 +346,9 @@ class NoteScreenState extends State<NoteScreen> {
                   children: [
                     if (isEditable) QuillSimpleToolbar(
                       controller: _quillController,
-                      config: const QuillSimpleToolbarConfig(),
+                      config: const QuillSimpleToolbarConfig(
+                        showBackgroundColorButton: false, // Disable background color tool
+                      ),
                     ),
                     const SizedBox(height: 8),
                     TextField(
