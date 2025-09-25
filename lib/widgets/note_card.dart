@@ -1,11 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import 'package:notestack/services/secure_storage_service.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
 import '../screens/note_screen.dart';
-
 
 class NoteCard extends StatefulWidget {
   final Note note;
@@ -26,6 +27,20 @@ class NoteCard extends StatefulWidget {
 class _NoteCardState extends State<NoteCard> {
   final SecureStorageService _secureStorageService = SecureStorageService();
 
+  String _getPlainTextFromDelta(String deltaJson) {
+    if (deltaJson.isEmpty) {
+      return 'No content';
+    }
+    try {
+      final List<dynamic> jsonData = jsonDecode(deltaJson);
+      final doc = Document.fromJson(jsonData);
+      return doc.toPlainText().trim().isNotEmpty ? doc.toPlainText().trim() : 'No content';
+    } catch (e) {
+      // If it's not valid JSON, it might be old plain text data
+      return deltaJson.trim().isNotEmpty ? deltaJson.trim() : 'No content';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final noteProvider = Provider.of<NoteProvider>(context);
@@ -33,10 +48,10 @@ class _NoteCardState extends State<NoteCard> {
     final theme = Theme.of(context);
 
     Color C_cardBackground; // Effective card background color
-    Color C_titleText;      // Effective color for title
-    Color C_subtitleText;   // Effective color for subtitle/content preview
-    Color C_dateText;       // Effective color for date
-    Color C_statusIcon;     // Effective color for status icons (pin, lock)
+    Color C_titleText; // Effective color for title
+    Color C_subtitleText; // Effective color for subtitle/content preview
+    Color C_dateText; // Effective color for date
+    Color C_statusIcon; // Effective color for status icons (pin, lock)
 
     bool hasCustomNoteColor = widget.note.colorValue != null;
 
@@ -116,6 +131,8 @@ class _NoteCardState extends State<NoteCard> {
         trailingWidget = Row(mainAxisSize: MainAxisSize.min, children: statusIcons);
       }
     }
+    
+    final plainTextContent = _getPlainTextFromDelta(widget.note.content);
 
     if (widget.isGridView) {
       // GridView layout: equal width/height, custom arrangement
@@ -200,7 +217,7 @@ class _NoteCardState extends State<NoteCard> {
                                 ),
                               )
                             : Text(
-                                widget.note.content.isEmpty ? 'No content' : widget.note.content,
+                                plainTextContent,
                                 style: TextStyle(color: C_subtitleText, fontSize: 14),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
@@ -286,7 +303,7 @@ class _NoteCardState extends State<NoteCard> {
                               overflow: TextOverflow.ellipsis,
                             )
                           : Text(
-                              widget.note.content.isEmpty ? 'No content' : widget.note.content,
+                              plainTextContent,
                               style: TextStyle(color: C_subtitleText),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
