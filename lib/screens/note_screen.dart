@@ -6,6 +6,8 @@ import 'package:intl/intl.dart'; // For date formatting
 import 'package:notestack/services/secure_storage_service.dart';
 import '../models/note.dart';
 import '../providers/note_provider.dart';
+import 'package:fleather/fleather.dart'; // Added for Fleather
+import 'package:parchment/parchment.dart'; // Added for ParchmentDocument
 
 class NoteScreen extends StatefulWidget {
   final Note? note;
@@ -18,7 +20,10 @@ class NoteScreen extends StatefulWidget {
 
 class NoteScreenState extends State<NoteScreen> {
   final _titleController = TextEditingController();
-  final _contentController = TextEditingController();
+  // final _contentController = TextEditingController(); // Removed
+  FleatherController? _fleatherController; // Added
+  final FocusNode _focusNode = FocusNode(); // Added
+
   final _passwordController = TextEditingController();
   final SecureStorageService _secureStorageService = SecureStorageService();
   String _selectedCategory = 'Personal'; // Default category
@@ -26,7 +31,6 @@ class NoteScreenState extends State<NoteScreen> {
   DateTime? _createdAt;
   bool _isLocked = false;
   bool _isTemporarilyUnlocked = false;
-
 
   // Predefined Material colors for the picker
   final List<Color> _defaultColors = [
@@ -49,7 +53,9 @@ class NoteScreenState extends State<NoteScreen> {
     super.initState();
     if (widget.note != null) {
       _titleController.text = widget.note!.title;
-      _contentController.text = widget.note!.content;
+      // _contentController.text = widget.note!.content; // Removed
+      // Initialize FleatherController with existing ParchmentDocument
+      _fleatherController = FleatherController(document: widget.note!.content); 
       _selectedCategory = widget.note!.category;
       _selectedColorValue = widget.note!.colorValue;
       _createdAt = widget.note!.createdAt;
@@ -61,22 +67,29 @@ class NoteScreenState extends State<NoteScreen> {
         _selectedCategory = categories.firstWhere((c) => c != 'All', orElse: () => 'Personal');
       }
       _createdAt = DateTime.now(); // Set creation time for new note display
+      // Initialize FleatherController with an empty document for new notes
+      _fleatherController = FleatherController();
     }
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    _contentController.dispose();
+    // _contentController.dispose(); // Removed
+    _fleatherController?.dispose(); // Added
+    _focusNode.dispose(); // Added
     _passwordController.dispose();
     super.dispose();
   }
 
   void _saveNote() {
     final title = _titleController.text.trim();
-    final content = _contentController.text.trim();
-    // Only save if there is a title, content, or if it's an existing note (to save color/category changes)
-    if (title.isEmpty && content.isEmpty && widget.note == null) return;
+    // Get content from FleatherController
+    final ParchmentDocument content = _fleatherController!.document; 
+
+    // Only save if there is a title, content, or if it's an existing note
+    // Check if content is effectively empty by looking at its plain text representation
+    if (title.isEmpty && content.toPlainText().trim().isEmpty && widget.note == null) return;
 
     final noteProvider = Provider.of<NoteProvider>(context, listen: false);
     final now = DateTime.now();
@@ -84,22 +97,22 @@ class NoteScreenState extends State<NoteScreen> {
     if (widget.note == null) {
       noteProvider.addNote(
         title,
-        content,
+        content, // Pass ParchmentDocument
         _selectedCategory,
         colorValue: _selectedColorValue,
-        createdAt: now, // Explicitly set creation time
+        createdAt: now, 
       );
     } else {
       noteProvider.updateNote(Note(
         id: widget.note!.id,
         title: title,
-        content: content,
+        content: content, // Pass ParchmentDocument
         category: _selectedCategory,
-        createdAt: widget.note!.createdAt, // Preserve original creation date
-        modifiedAt: now, // Set modification date
+        createdAt: widget.note!.createdAt,
+        modifiedAt: now,
         isArchived: widget.note!.isArchived,
         isPinned: widget.note!.isPinned,
-        isLocked: widget.note!.isLocked,
+        isLocked: widget.note!.isLocked, 
         colorValue: _selectedColorValue,
       ));
     }
@@ -110,15 +123,15 @@ class NoteScreenState extends State<NoteScreen> {
     int? initialDialogValue = _selectedColorValue;
     List<Widget> actionButtons = [
       TextButton(
-        onPressed: () => Navigator.of(context).pop(initialDialogValue), // Keep current if cancelled
+        onPressed: () => Navigator.of(context).pop(initialDialogValue),
         child: const Text('Cancel'),
       ),
     ];
 
-    if (_selectedColorValue != null) { // Show clear only if a color is selected
+    if (_selectedColorValue != null) {
       actionButtons.add(
         TextButton(
-          onPressed: () => Navigator.of(context).pop(null), // Clear color
+          onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Clear Color'),
         ),
       );
@@ -151,7 +164,7 @@ class NoteScreenState extends State<NoteScreen> {
                       children: _defaultColors.map((color) {
                         return InkWell(
                           onTap: () => Navigator.of(dialogContext).pop(color.value),
-                          borderRadius: BorderRadius.circular(20), // For ink splash
+                          borderRadius: BorderRadius.circular(20),
                           child: Container(
                             width: 40,
                             height: 40,
@@ -183,7 +196,6 @@ class NoteScreenState extends State<NoteScreen> {
       },
     );
 
-    // Check if a selection was made or cleared, and if it's different from the initial state.
     if (newColorValue != initialDialogValue) { 
       setState(() {
         _selectedColorValue = newColorValue;
@@ -193,7 +205,7 @@ class NoteScreenState extends State<NoteScreen> {
 
   String _formatDateTime(DateTime? dateTime) {
     if (dateTime == null) return 'N/A';
-    return DateFormat.yMMMd().add_jm().format(dateTime); // e.g., Jan 23, 2024, 5:30 PM
+    return DateFormat.yMMMd().add_jm().format(dateTime);
   }
 
   void _unlockNote() async {
@@ -262,18 +274,13 @@ class NoteScreenState extends State<NoteScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final noteProvider = Provider.of<NoteProvider>(context, listen: false); // For categories
+    final noteProvider = Provider.of<NoteProvider>(context, listen: false);
     final availableCategories = noteProvider.categories.where((c) => c != 'All').toList();
     if (availableCategories.isEmpty && _selectedCategory == 'Personal') {
-      // If no categories from provider and current is default 'Personal', ensure 'Personal' is an option
       availableCategories.add('Personal');
     }
     if (!availableCategories.contains(_selectedCategory) && availableCategories.isNotEmpty) {
       _selectedCategory = availableCategories.first;
-    } else if (availableCategories.isEmpty) {
-      // Handle case with no categories at all (e.g. user deleted all of them)
-      // You might want a default placeholder or disable category selection.
-      // For now, let's ensure _selectedCategory remains (e.g. 'Personal' or previously set)
     }
 
     final theme = Theme.of(context);
@@ -282,7 +289,7 @@ class NoteScreenState extends State<NoteScreen> {
     Color appBarColor = _selectedColorValue != null
         ? Color(_selectedColorValue!).withOpacity(0.7)
         : Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).colorScheme.primary;
-    Color? appBarForegroundColor = // Choose contrasting color for text/icons
+    Color? appBarForegroundColor = 
     ThemeData.estimateBrightnessForColor(appBarColor) == Brightness.dark
         ? Colors.white
         : Colors.black;
@@ -325,82 +332,102 @@ class NoteScreenState extends State<NoteScreen> {
       appBar: AppBar(
         title: Text(widget.note == null ? 'New Note' : 'Edit Note',
             style: TextStyle(color: appBarForegroundColor)),
-        backgroundColor: appBarColor, // Animated via setState
-        elevation: _selectedColorValue != null ? 0 : null, // Flatter if colored
-        iconTheme: IconThemeData(color: appBarForegroundColor), // For back button
-        actionsIconTheme: IconThemeData(color: appBarForegroundColor), // For action icons
+        backgroundColor: appBarColor,
+        elevation: _selectedColorValue != null ? 0 : null,
+        iconTheme: IconThemeData(color: appBarForegroundColor),
+        actionsIconTheme: IconThemeData(color: appBarForegroundColor),
         actions: appBarActions,
       ),
-      body: FadeIn(
+      body: FadeIn( // Keep FadeIn for overall screen transition
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 0), // Adjust bottom padding
           child: !isEditable 
           ? _buildLockedState(theme)
           : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextField(
                 controller: _titleController,
                 style: Theme.of(context).textTheme.headlineSmall,
                 decoration: InputDecoration(
                   hintText: 'Title',
-                  border: InputBorder.none, // Modern flat look
+                  border: InputBorder.none,
                   filled: false,
                 ),
                 textCapitalization: TextCapitalization.sentences,
+                enabled: isEditable,
               ),
               const SizedBox(height: 8),
-              Expanded(
-                child: TextField(
-                  controller: _contentController,
-                  decoration: InputDecoration(
-                    hintText: 'Content',
-                    border: InputBorder.none, // Modern flat look
-                    filled: false,
+              // --- Fleather Editor Integration ---
+              if (_fleatherController == null)
+                const Expanded(child: Center(child: CircularProgressIndicator()))
+              else
+                Expanded(
+                  child: Column(
+                    children: [
+                      FleatherToolbar.basic(
+                        controller: _fleatherController!,
+                      ),
+                      const Divider(height: 1, thickness: 1),
+                      Expanded(
+                        child: FleatherEditor(
+                          controller: _fleatherController!,
+                          focusNode: _focusNode,
+                          readOnly: !isEditable, // Set readOnly based on isEditable
+                          padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0), // Inner padding for editor
+                          onLaunchUrl: (url) { /* Handle URL launch if needed */ },
+                        ),
+                      ),
+                    ],
                   ),
-                  maxLines: null, // Expands as user types
-                  keyboardType: TextInputType.multiline,
-                  textCapitalization: TextCapitalization.sentences,
                 ),
-              ),
-              const SizedBox(height: 16),
+              // --- End Fleather Editor ---
+              const SizedBox(height: 16), // Spacing before category dropdown
               if (availableCategories.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  value: availableCategories.contains(_selectedCategory) ? _selectedCategory : availableCategories.first,
-                  decoration: InputDecoration(
-                    labelText: 'Category',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                Padding( // Add padding around dropdown and date
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min, // Important for Column inside Column
+                    children: [
+                      DropdownButtonFormField<String>(
+                        value: availableCategories.contains(_selectedCategory) ? _selectedCategory : availableCategories.first,
+                        decoration: InputDecoration(
+                          labelText: 'Category',
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          filled: true,
+                          fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                        ),
+                        items: availableCategories.map((category) => DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        ))
+                            .toList(),
+                        onChanged: isEditable ? (value) {
+                          if (value != null) {
+                            setState(() {
+                              _selectedCategory = value;
+                            });
+                          }
+                        } : null,
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Created: ${_formatDateTime(_createdAt)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
-                  items: availableCategories.map((category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  ))
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() {
-                        _selectedCategory = value;
-                      });
-                    }
-                  },
                 ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.start, // Align to the start
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Created: ${_formatDateTime(_createdAt)}',
-                      style: Theme.of(context).textTheme.bodySmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  // Removed the Modified date Text widget
-                ],
-              )
             ],
           ),
         ),

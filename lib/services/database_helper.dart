@@ -106,19 +106,25 @@ class DatabaseHelper {
     if (query.isEmpty) {
       return [];
     }
+    // Only search title in SQL, filter content in Dart
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
-      where: '(title LIKE ? OR content LIKE ?) AND isArchived = 0',
-      whereArgs: ['%$query%', '%$query%'],
+      where: 'title LIKE ? AND isArchived = 0',
+      whereArgs: ['%$query%'],
       orderBy: 'modifiedAt DESC',
     );
 
     if (maps.isEmpty) {
       return [];
     }
+    // Filter by content in Dart
+    final lowerQuery = query.toLowerCase();
     return List.generate(maps.length, (i) {
       return Note.fromMap(maps[i]);
-    });
+    }).where((note) {
+      return note.title.toLowerCase().contains(lowerQuery) ||
+             note.content.toPlainText().toLowerCase().contains(lowerQuery);
+    }).toList();
   }
 
   Future<void> updateNote(Note note) async {

@@ -2,6 +2,8 @@ import 'dart:io'; // Added for Platform check
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // Added for FFI
+import 'package:fleather/fleather.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 // import 'package:google_fonts/google_fonts.dart'; // Already handled in AppTheme
 import 'providers/note_provider.dart';
 import 'providers/theme_provider.dart'; // Import ThemeProvider
@@ -51,6 +53,13 @@ class NoteStackApp extends StatelessWidget {
             '/checklist': (context) => const ChecklistScreen(),
           },
           debugShowCheckedModeBanner: false, // Optional: to hide debug banner
+          localizationsDelegates: const [
+            FleatherLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: FleatherLocalizations.supportedLocales,
         );
       },
     );

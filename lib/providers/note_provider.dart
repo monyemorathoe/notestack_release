@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:parchment/parchment.dart'; // Added for ParchmentDocument
 import '../models/note.dart';
 import '../services/database_helper.dart';
 import 'package:uuid/uuid.dart';
@@ -44,11 +45,12 @@ class NoteProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addNote(String title, String content, String category, {DateTime? createdAt, int? colorValue}) async {
+  // Modified addNote to accept ParchmentDocument for content
+  Future<void> addNote(String title, ParchmentDocument content, String category, {DateTime? createdAt, int? colorValue}) async {
     final note = Note(
       id: const Uuid().v4(),
       title: title,
-      content: content,
+      content: content, // content is now ParchmentDocument
       category: category,
       createdAt: createdAt ?? DateTime.now(),
       modifiedAt: createdAt ?? DateTime.now(), 
@@ -364,7 +366,8 @@ class NoteProvider with ChangeNotifier {
       try {
         final originalNote = _allNotes.firstWhere((n) => n.id == noteId);
         if (originalNote.isPinned) {
-          final Note updatedNote = Note(
+          // Instead of creating updatedNote and not using it, just update directly:
+          await DatabaseHelper.instance.updateNote(Note(
             id: originalNote.id,
             title: originalNote.title,
             content: originalNote.content,
@@ -375,8 +378,7 @@ class NoteProvider with ChangeNotifier {
             isPinned: false,
             isLocked: originalNote.isLocked,
             colorValue: originalNote.colorValue,
-          );
-          await DatabaseHelper.instance.updateNote(updatedNote);
+          ));
           changed = true;
         }
       } catch (e) { /* Note not found */ }
