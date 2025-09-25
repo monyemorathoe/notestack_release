@@ -312,7 +312,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       alignment: WrapAlignment.center,
                       children: _defaultColors.map((color) {
                         return InkWell(
-                          onTap: () => Navigator.of(dialogContext).pop(color.value),
+                          onTap: () => Navigator.of(dialogContext).pop(color.toARGB32()),
                           borderRadius: BorderRadius.circular(20), // For ink splash
                           child: Container(
                             width: 40,
@@ -321,13 +321,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 color: color,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: !multipleColors && currentCommonColorValue == color.value
+                                  color: !multipleColors && currentCommonColorValue == color.toARGB32()
                                       ? Theme.of(dialogContext).colorScheme.onSurface
                                       : Colors.transparent,
                                   width: 2,
                                 )),
-                          ),
-                        );
+                        )); // closes InkWell
                       }).toList(),
                     ),
                   ),
@@ -340,9 +339,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-        );
-      },
-    );
+        ); // closes Dialog
+      }, // closes builder
+    ); // closes showDialog
 
     if (newColorValue != initialDialogValue) {
       await noteProvider.setColorForSelectedNotes(newColorValue);
@@ -964,19 +963,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             ),
                           )
                         : _isGridView
-                            ? GridView.builder(
-                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 2,
-                                  childAspectRatio: 0.75,
-                                  crossAxisSpacing: 8.0,
-                                  mainAxisSpacing: 8.0,
-                                ),
-                                padding: EdgeInsets.fromLTRB(8.0, 8.0, 8.0, (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : 8.0), 
-                                itemCount: filteredNotes.length,
-                                itemBuilder: (context, index) {
-                                  final note = filteredNotes[index];
-                                  return NoteCard(note: note, isGridView: true);
-                                })
+                            ? (Platform.isWindows || Platform.isMacOS || Platform.isLinux
+                                ? LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      // Calculate available width/height for cards
+                                      final double gridPadding = 8.0;
+                                      final double gridSpacing = 8.0;
+                                      final int columns = 2;
+                                      final int rows = 2;
+                                      final double availableWidth = constraints.maxWidth - (gridPadding * 2) - gridSpacing;
+                                      final double availableHeight = constraints.maxHeight - (gridPadding * 2) - gridSpacing;
+                                      final double cardWidth = availableWidth / columns;
+                                      final double cardHeight = availableHeight / rows;
+                                      final double aspectRatio = cardWidth / cardHeight;
+                                      return GridView.builder(
+                                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                                          crossAxisCount: columns,
+                                          childAspectRatio: aspectRatio,
+                                          crossAxisSpacing: gridSpacing,
+                                          mainAxisSpacing: gridSpacing,
+                                        ),
+                                        padding: EdgeInsets.fromLTRB(
+                                          gridPadding,
+                                          gridPadding,
+                                          gridPadding,
+                                          (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : gridPadding,
+                                        ),
+                                        itemCount: filteredNotes.length,
+                                        itemBuilder: (context, index) {
+                                          final note = filteredNotes[index];
+                                          return NoteCard(note: note, isGridView: true);
+                                        },
+                                      );
+                                    },
+                                  )
+                                : GridView.builder(
+                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 2, // Mobile/tablet: original grid
+                                      childAspectRatio: 0.75,
+                                      crossAxisSpacing: 8.0,
+                                      mainAxisSpacing: 8.0,
+                                    ),
+                                    padding: EdgeInsets.fromLTRB(8.0, 8.0, 8.0, (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : 8.0),
+                                    itemCount: filteredNotes.length,
+                                    itemBuilder: (context, index) {
+                                      final note = filteredNotes[index];
+                                      return NoteCard(note: note, isGridView: true);
+                                    }))
                             : ListView.builder(
                                 padding: EdgeInsets.only(bottom: (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : 8.0), 
                                 itemCount: filteredNotes.length,
