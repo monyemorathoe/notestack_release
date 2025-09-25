@@ -227,34 +227,37 @@ class NoteScreenState extends State<NoteScreen> {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       elevation: 1,
-      child: Column(
-        children: [
-          // Toolbar header with clear formatting indication
-          ListTile(
-            dense: true,
-            leading: const Icon(Icons.format_color_text, size: 20),
-            title: const Text('Formatting Tools'),
-            trailing: IconButton(
-              icon: Icon(_showToolbar ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down),
-              onPressed: () => setState(() => _showToolbar = !_showToolbar),
-              tooltip: _showToolbar ? 'Hide formatting' : 'Show formatting',
-            ),
-            onTap: () => setState(() => _showToolbar = !_showToolbar),
-          ),
-          // Animated toolbar
-          AnimatedSize(
-            duration: const Duration(milliseconds: 200),
-            child: Container(
-              height: _showToolbar ? null : 0,
-              child: _showToolbar ? QuillSimpleToolbar(
-                controller: _quillController,
-                config: const QuillSimpleToolbarConfig(
-                  showBackgroundColorButton: false,
+      child: InkWell(
+        onTap: () => setState(() => _showToolbar = !_showToolbar),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.format_color_text, size: 20),
+                  const SizedBox(width: 12),
+                  const Expanded(child: Text('Formatting Tools')),
+                  // Vertically aligned chevron, matching category selector
+                  Icon(_showToolbar ? Icons.expand_less : Icons.expand_more),
+                ],
+              ),
+              AnimatedSize(
+                duration: const Duration(milliseconds: 200),
+                child: SizedBox(
+                  height: _showToolbar ? null : 0,
+                  child: _showToolbar ? QuillSimpleToolbar(
+                    controller: _quillController,
+                    config: const QuillSimpleToolbarConfig(
+                      showBackgroundColorButton: false,
+                    ),
+                  ) : null,
                 ),
-              ) : null,
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -308,8 +311,10 @@ class NoteScreenState extends State<NoteScreen> {
   void _unlockNote() async {
     final password = _passwordController.text;
     if (password.isEmpty) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Password cannot be empty')));
+      }
       return;
     }
 
