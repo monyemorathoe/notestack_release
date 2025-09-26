@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart'; // Added import
@@ -270,20 +272,54 @@ class _ArchivesScreenState extends State<ArchivesScreen> {
                   ),
                 );
               } else if (_isGridView) {
-                content = GridView.builder(
-                  padding: listPadding, // Apply dynamic padding
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    childAspectRatio: 0.75,
-                    crossAxisSpacing: 8.0,
-                    mainAxisSpacing: 8.0,
-                  ),
-                  itemCount: archivedNotes.length,
-                  itemBuilder: (context, index) {
-                    final note = archivedNotes[index];
-                    return NoteCard(note: note, isGridView: true);
-                  },
-                );
+                content = (Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+                    ? LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Calculate available width/height for cards
+                          final double gridPadding = 8.0;
+                          final double gridSpacing = 8.0;
+                          final int columns = 2;
+                          final int rows = 2;
+                          final double availableWidth = constraints.maxWidth - (gridPadding * 2) - gridSpacing;
+                          final double availableHeight = constraints.maxHeight - (gridPadding * 2) - gridSpacing;
+                          final double cardWidth = availableWidth / columns;
+                          final double cardHeight = availableHeight / rows;
+                          final double aspectRatio = cardWidth / cardHeight;
+                          return GridView.builder(
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: columns,
+                              childAspectRatio: aspectRatio,
+                              crossAxisSpacing: gridSpacing,
+                              mainAxisSpacing: gridSpacing,
+                            ),
+                            padding: EdgeInsets.fromLTRB(
+                              gridPadding,
+                              gridPadding,
+                              gridPadding,
+                              (isSelectionMode && selectedCount > 0) ? 88.0 : gridPadding,
+                            ),
+                            itemCount: archivedNotes.length,
+                            itemBuilder: (context, index) {
+                              final note = archivedNotes[index];
+                              return NoteCard(note: note, isGridView: true);
+                            },
+                          );
+                        },
+                      )
+                    : GridView.builder(
+                        padding: listPadding, // Apply dynamic padding
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 8.0,
+                          mainAxisSpacing: 8.0,
+                        ),
+                        itemCount: archivedNotes.length,
+                        itemBuilder: (context, index) {
+                          final note = archivedNotes[index];
+                          return NoteCard(note: note, isGridView: true);
+                        },
+                      );
               } else {
                 content = ListView.builder(
                   padding: listPadding, // Apply dynamic padding

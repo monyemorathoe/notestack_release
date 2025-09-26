@@ -436,28 +436,47 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               elevation: 2.0,
               borderRadius: BorderRadius.circular(12.0),
               shadowColor: Colors.black38,
-              child: TextField(
-                controller: _inlinePasswordController,
-                obscureText: _obscureInlinePassword,
-                decoration: InputDecoration(
-                  hintText: _inlinePasswordHintText,
-                  hintStyle: _inlinePasswordHintStyle,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  inputDecorationTheme: InputDecorationTheme(
+                    filled: true,
+                    fillColor: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF323232) // Consistent dark color for dark mode
+                        : theme.colorScheme.surface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    hoverColor: Theme.of(context).brightness == Brightness.dark
+                        ? const Color(0xFF323232)
+                        : theme.colorScheme.surface,
                   ),
-                  filled: true,
-                  fillColor: theme.colorScheme.surface,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 ),
-                autofocus: true,
-                onChanged: (_) {
-                  if (_inlinePasswordHintText != _defaultHintText) {
-                    _resetInlinePasswordHint();
-                  }
-                },
-                onSubmitted: (_) => _handleSubmittedPasswordForUnlock(noteProvider),
+                child: TextField(
+                  controller: _inlinePasswordController,
+                  obscureText: _obscureInlinePassword,
+                  decoration: InputDecoration(
+                    hintText: _inlinePasswordHintText,
+                    hintStyle: _inlinePasswordHintStyle,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  ),
+                  autofocus: true,
+                  onChanged: (_) {
+                    if (_inlinePasswordHintText != _defaultHintText) {
+                      _resetInlinePasswordHint();
+                    }
+                  },
+                  onSubmitted: (_) => _handleSubmittedPasswordForUnlock(noteProvider),
+                ),
               ),
             ),
           ),
@@ -693,7 +712,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             onPressed: () {
               showSearch(
                 context: context,
-                delegate: NotesSearchDelegate(),
+                delegate: NotesSearchDelegate(isGridView: _isGridView),
               );
             },
           ),

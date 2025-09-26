@@ -12,23 +12,35 @@ import 'screens/home_screen.dart';
 import 'screens/checklist_screen.dart';
 import 'package:notestack/theme/app_theme.dart';
 // import 'services/notification_service.dart'; // Removed NotificationService import
+import 'package:window_manager/window_manager.dart'; // For setting native window title
 
 void main() async {
   // Ensure Flutter bindings are initialized
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize FFI for sqflite if on Windows, Linux or macOS
+  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    await windowManager.ensureInitialized();
+
+    // Set native window title
+    await windowManager.setTitle('NoteStack');
+
+    // Lock minimum size
+    await windowManager.setMinimumSize(const Size(650, 700));
+    // (Optional) Lock maximum size too, if you want to prevent resizing beyond certain bounds
+    // await windowManager.setMaximumSize(const Size(800, 800));
+  }
+
+  // Initialize FFI for sqflite if on desktop
   if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
 
-  // await NotificationService().init(); // Removed NotificationService initialization
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => NoteProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeProvider()), // Add ThemeProvider
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => ChecklistProvider()),
       ],
       child: const NoteStackApp(),

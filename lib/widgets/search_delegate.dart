@@ -1,9 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../models/note.dart';
 import '../services/database_helper.dart';
 import 'note_card.dart'; // Assuming NoteCard is in widgets folder
 
 class NotesSearchDelegate extends SearchDelegate<Note?> {
+  final bool isGridView;
+
+  NotesSearchDelegate({required this.isGridView});
+
   @override
   ThemeData appBarTheme(BuildContext context) {
     final theme = Theme.of(context);
@@ -70,21 +76,62 @@ class NotesSearchDelegate extends SearchDelegate<Note?> {
           );
         }
         final results = snapshot.data!;
-        return ListView.builder(
-          padding: const EdgeInsets.all(8.0),
-          itemCount: results.length,
-          itemBuilder: (context, index) {
-            // Note: If you want to navigate to NoteScreen when a search result is tapped:
-            // return InkWell(
-            //   onTap: () {
-            //     close(context, results[index]); // This will pass the selected note back
-            //     // You might want to navigate to NoteScreen with results[index] from where you called showSearch
-            //   },
-            //   child: NoteCard(note: results[index]),
-            // );
-            return NoteCard(note: results[index]);
-          },
-        );
+        if (isGridView) {
+          return (Platform.isWindows || Platform.isMacOS || Platform.isLinux)
+              ? LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Calculate available width/height for cards
+                    final double gridPadding = 8.0;
+                    final double gridSpacing = 8.0;
+                    final int columns = 2;
+                    final int rows = 2;
+                    final double availableWidth = constraints.maxWidth - (gridPadding * 2) - gridSpacing;
+                    final double availableHeight = constraints.maxHeight - (gridPadding * 2) - gridSpacing;
+                    final double cardWidth = availableWidth / columns;
+                    final double cardHeight = availableHeight / rows;
+                    final double aspectRatio = cardWidth / cardHeight;
+                    return GridView.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: columns,
+                        childAspectRatio: aspectRatio,
+                        crossAxisSpacing: gridSpacing,
+                        mainAxisSpacing: gridSpacing,
+                      ),
+                      padding: EdgeInsets.fromLTRB(
+                        gridPadding,
+                        gridPadding,
+                        gridPadding,
+                        gridPadding,
+                      ),
+                      itemCount: results.length,
+                      itemBuilder: (context, index) {
+                        return NoteCard(note: results[index], isGridView: true);
+                      },
+                    );
+                  },
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.all(8.0),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2, // Standard 2 columns for mobile
+                    childAspectRatio: 0.75, // Common aspect ratio for notes
+                    crossAxisSpacing: 8.0,
+                    mainAxisSpacing: 8.0,
+                  ),
+                  itemCount: results.length,
+                  itemBuilder: (context, index) {
+                    return NoteCard(note: results[index], isGridView: true);
+                  },
+                );
+        } else {
+          return ListView.builder(
+            padding: const EdgeInsets.all(8.0),
+            itemCount: results.length,
+            itemBuilder: (context, index) {
+              return NoteCard(note: results[index], isGridView: false);
+            },
+          );
+        }
       },
     );
   }
