@@ -31,13 +31,13 @@ Future<void> _showLockedNotesInfoDialog(BuildContext context, {String? title, St
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  title ?? 'Cannot Delete Locked Notes', // Default title
+                  title ?? 'Cannot Perform Action on Locked Note', // Generic title
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  content ?? 'Please unlock the selected notes before deleting.', // Default content
+                  content ?? 'Please unlock this note before performing this action.', // Generic content
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.grey),
                 ),
@@ -76,7 +76,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isGridView = false;
   static const String _kPrefIsGridView = 'isGridView';
   bool _swipeToDeleteNotesEnabled = false;
-  static const String _kSwipeToDeleteNotes = 'swipeToDeleteNotes'; // Key for SharedPreferences
+  bool _swipeToArchiveNotesEnabled = false; // Added for swipe to archive
+  static const String _kSwipeToDeleteNotes = 'swipeToDeleteNotes';
+  static const String _kSwipeToArchiveNotes = 'swipeToArchiveNotes'; // Added for swipe to archive
 
   // State for inline unlock
   bool _isShowingInlineUnlock = false;
@@ -111,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       duration: const Duration(milliseconds: 300),
     );
     _loadViewPreference();
-    _loadSwipeToDeleteNotesPreference(); // Load swipe to delete preference
+    _loadSwipePreferences(); // Load all swipe preferences
   }
 
   Future<void> _loadViewPreference() async {
@@ -128,11 +130,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _loadSwipeToDeleteNotesPreference() async {
+  Future<void> _loadSwipePreferences() async {
     final prefs = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
         _swipeToDeleteNotesEnabled = prefs.getBool(_kSwipeToDeleteNotes) ?? false;
+        _swipeToArchiveNotesEnabled = prefs.getBool(_kSwipeToArchiveNotes) ?? false;
       });
     }
   }
@@ -397,7 +400,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                             Navigator.of(dialogContext).pop();
                           }
                           if (!deleteSuccess && parentContext.mounted) {
-                            _showLockedNotesInfoDialog(parentContext);
+                            _showLockedNotesInfoDialog(parentContext, 
+                              title: 'Cannot Delete Locked Notes',
+                              content: 'Please unlock the selected notes before deleting.'
+                            );
                           }
                         },
                       ),
@@ -550,7 +556,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             Icons.palette_outlined,
             'Color',
             isAnyNoteLocked 
-              ? null // Simply disable if any note is locked
+              ? null 
               : () => _showColorPickerForSelectedNotes(context, noteProvider),
             isEnabled: !isAnyNoteLocked,
           ),
@@ -740,7 +746,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   context,
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 );
-                _loadSwipeToDeleteNotesPreference(); 
+                _loadSwipePreferences(); // Reload all swipe preferences
                 _loadViewPreference(); 
               }
             },
@@ -1034,48 +1040,99 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                 itemCount: filteredNotes.length,
                                 itemBuilder: (context, index) {
                                   final note = filteredNotes[index];
-                                  Widget noteCard = NoteCard(note: note);
+                                  Widget noteCardListItem = NoteCard(note: note);
 
-                                  if (!_isGridView && _swipeToDeleteNotesEnabled) {
-                                    return Dismissible(
-                                      key: ValueKey(note.id),
-                                      background: Container(
+                                  if (!_isGridView && (_swipeToDeleteNotesEnabled || _swipeToArchiveNotesEnabled)) {
+                                    DismissDirection direction = DismissDirection.none;
+                                    Widget? background;
+                                    Widget? secondaryBackground;
+
+                                    if (_swipeToDeleteNotesEnabled && _swipeToArchiveNotesEnabled) {
+                                      direction = DismissDirection.horizontal;
+                                      background = Container(
+                                        color: Theme.of(context).colorScheme.primaryContainer, // Archive background (swipe right)
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.only(left: 20.0),
+                                        child: Icon(Icons.archive_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                                      );
+                                      secondaryBackground = Container(
+                                        color: Theme.of(context).colorScheme.errorContainer, // Delete background (swipe left)
+                                        alignment: Alignment.centerRight,
+                                        padding: const EdgeInsets.only(right: 20.0),
+                                        child: Icon(Icons.delete_sweep_outlined, color: Theme.of(context).colorScheme.onErrorContainer),
+                                      );
+                                    } else if (_swipeToArchiveNotesEnabled) {
+                                      direction = DismissDirection.startToEnd; // Swipe right to archive
+                                      background = Container(
+                                        color: Theme.of(context).colorScheme.primaryContainer,
+                                        alignment: Alignment.centerLeft,
+                                        padding: const EdgeInsets.only(left: 20.0),
+                                        child: Icon(Icons.archive_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
+                                      );
+                                    } else if (_swipeToDeleteNotesEnabled) {
+                                      direction = DismissDirection.endToStart; // Swipe left to delete
+                                      background = Container(
                                         color: Theme.of(context).colorScheme.errorContainer,
                                         alignment: Alignment.centerRight,
                                         padding: const EdgeInsets.only(right: 20.0),
                                         child: Icon(Icons.delete_sweep_outlined, color: Theme.of(context).colorScheme.onErrorContainer),
-                                      ),
-                                      direction: DismissDirection.endToStart,
-                                      confirmDismiss: (direction) async {
-                                        if (note.isLocked) {
-                                          _showLockedNotesInfoDialog(context, 
-                                            title: 'Cannot Delete Locked Note',
-                                            content: 'Please unlock this note before deleting.'
-                                          );
-                                          return false; // Do not dismiss if locked
-                                        }
-                                        return true; // Allow dismiss if not locked
-                                      },
-                                      onDismissed: (direction) {
-                                        final noteTitle = note.title.isNotEmpty ? note.title : "Untitled note";
-                                        noteProvider.deleteNote(note.id, isSwipeDelete: true);
-                                        ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('"$noteTitle" deleted'),
-                                            action: SnackBarAction(
-                                              label: 'Undo',
-                                              onPressed: () {
-                                                noteProvider.undoDeleteNote();
-                                              },
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                      child: noteCard,
-                                    );
+                                      );
+                                    }
+
+                                    if (direction != DismissDirection.none) {
+                                      return Dismissible(
+                                        key: ValueKey(note.id),
+                                        background: background, 
+                                        secondaryBackground: secondaryBackground, 
+                                        direction: direction,
+                                        confirmDismiss: (dismissDirection) async {
+                                          if (note.isLocked) {
+                                            String actionText = dismissDirection == DismissDirection.startToEnd ? "archive" : "delete";
+                                            _showLockedNotesInfoDialog(context, 
+                                              title: 'Cannot ${actionText[0].toUpperCase()}${actionText.substring(1)} Locked Note',
+                                              content: 'Please unlock this note before ${actionText}ing.'
+                                            );
+                                            return false; // Do not dismiss if locked
+                                          }
+                                          return true; // Allow dismiss if not locked
+                                        },
+                                        onDismissed: (dismissDirection) {
+                                          final noteTitle = note.title.isNotEmpty ? note.title : "Untitled note";
+                                          if (dismissDirection == DismissDirection.startToEnd) { // Swiped right (Archive)
+                                            noteProvider.archiveNote(note.id, isSwipeArchive: true);
+                                            ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('"$noteTitle" archived'),
+                                                action: SnackBarAction(
+                                                  label: 'Undo',
+                                                  onPressed: () {
+                                                    noteProvider.undoArchiveNote();
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          } else if (dismissDirection == DismissDirection.endToStart) { // Swiped left (Delete)
+                                            noteProvider.deleteNote(note.id, isSwipeDelete: true);
+                                            ScaffoldMessenger.of(context).removeCurrentSnackBar();
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(
+                                                content: Text('"$noteTitle" deleted'),
+                                                action: SnackBarAction(
+                                                  label: 'Undo',
+                                                  onPressed: () {
+                                                    noteProvider.undoDeleteNote();
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          }
+                                        },
+                                        child: noteCardListItem,
+                                      );
+                                    }
                                   }
-                                  return noteCard;
+                                  return noteCardListItem;
                                 }),
                   ),
                 ],

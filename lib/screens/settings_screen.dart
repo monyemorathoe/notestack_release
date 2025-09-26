@@ -26,9 +26,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _swipeToDeleteNotes = false;
   bool _swipeToDeleteChecklists = false;
 
+  // Swipe to archive state
+  bool _swipeToArchiveNotes = false;
+
   // Keys for SharedPreferences
   static const String _kSwipeToDeleteNotes = 'swipeToDeleteNotes';
   static const String _kSwipeToDeleteChecklists = 'swipeToDeleteChecklists';
+  static const String _kSwipeToArchiveNotes = 'swipeToArchiveNotes'; // Key for swipe to archive
 
   // Passwords will always be obscured as the toggle is removed.
   // These variables are kept to ensure obscureText: true is passed to TextFormFields.
@@ -87,6 +91,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _swipeToDeleteNotes = prefs.getBool(_kSwipeToDeleteNotes) ?? false;
       _swipeToDeleteChecklists = prefs.getBool(_kSwipeToDeleteChecklists) ?? false;
+      _swipeToArchiveNotes = prefs.getBool(_kSwipeToArchiveNotes) ?? false; // Load swipe to archive
     });
   }
 
@@ -98,6 +103,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _saveSwipeToDeleteChecklists(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_kSwipeToDeleteChecklists, value);
+  }
+
+  Future<void> _saveSwipeToArchiveNotes(bool value) async { // Save swipe to archive
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kSwipeToArchiveNotes, value);
   }
 
   void _setDialogHintError({
@@ -682,7 +692,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
             const SizedBox(height: 24),
             Text(
-              'Swipe to Delete',
+              'Swipe left to Delete',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
@@ -704,7 +714,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _saveSwipeToDeleteNotes(value); // Save to SharedPreferences
                       });
                     },
-                    secondary: const Icon(Icons.swipe_outlined),
+                    secondary: const Icon(Icons.swipe_left_outlined),
                   ),
                   const Divider(height: 1),
                   SwitchListTile(
@@ -717,7 +727,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         _saveSwipeToDeleteChecklists(value); // Save to SharedPreferences
                       });
                     },
-                    secondary: const Icon(Icons.swipe_vertical_outlined),
+                    secondary: const Icon(Icons.swipe_vertical_outlined), // Consider a more specific icon if available
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24), // Added space before new section
+            Text( // New section title
+              'Swipe right to Archive',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Card( // New card for swipe to archive
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Notes (List Mode Only)'),
+                    value: _swipeToArchiveNotes,
+                    onChanged: (bool value) {
+                      setState(() {
+                        _swipeToArchiveNotes = value;
+                        _saveSwipeToArchiveNotes(value); // Save to SharedPreferences
+                      });
+                    },
+                    secondary: const Icon(Icons.swipe_right_outlined),
                   ),
                 ],
               ),

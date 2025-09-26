@@ -14,7 +14,7 @@ class NoteProvider with ChangeNotifier {
 
   // For Undo functionality
   Note? _lastDeletedNote;
-  // No index needed for notes as we reload and re-filter/sort
+  Note? _lastArchivedNote; // For undoing swipe archive
 
   List<String> get categories => _categories;
   String? get selectedCategory => _selectedCategory;
@@ -31,16 +31,20 @@ class NoteProvider with ChangeNotifier {
     _lastDeletedNote = null;
   }
 
+  void _clearLastArchived() {
+    _lastArchivedNote = null;
+  }
+
   void setCategory(String? category) {
     _selectedCategory = category;
     _clearSelection();
     _clearLastDeleted();
+    _clearLastArchived();
     notifyListeners();
   }
 
   Future<void> loadNotes() async {
     _allNotes = await DatabaseHelper.instance.getNotes();
-    // _clearLastDeleted(); // Do not clear here as it might be needed for an immediate undo
     notifyListeners();
   }
 
@@ -59,6 +63,7 @@ class NoteProvider with ChangeNotifier {
     );
     await DatabaseHelper.instance.insertNote(note);
     _clearLastDeleted();
+    _clearLastArchived();
     await loadNotes();
   }
 
@@ -77,36 +82,92 @@ class NoteProvider with ChangeNotifier {
     );
     await DatabaseHelper.instance.updateNote(noteToUpdate);
     _clearLastDeleted();
+    _clearLastArchived();
     await loadNotes();
   }
 
-  // Updated deleteNote for single note deletion (e.g., swipe)
   Future<void> deleteNote(String id, {bool isSwipeDelete = false}) async {
     try {
       final noteToDelete = _allNotes.firstWhere((note) => note.id == id);
-      _lastDeletedNote = noteToDelete; // Store for potential undo
+      if (isSwipeDelete) {
+        _lastDeletedNote = noteToDelete;
+        _clearLastArchived(); // Clear other undo types
+      }
     } catch (e) {
-      _lastDeletedNote = null; // Note not found, shouldn't happen if ID is correct
-      // print("Error finding note to delete: $e");
-      return; // Exit if note not found
+      _lastDeletedNote = null;
+      return;
     }
     
     await DatabaseHelper.instance.deleteNote(id);
-    _selectedNoteIds.remove(id); // Ensure it's removed from selection if it was selected
+    _selectedNoteIds.remove(id);
     
-    // If it is not a swipe delete, it means it is a bulk delete or other operation,
-    // so we don't want to keep the last deleted note for swipe undo.
     if (!isSwipeDelete) {
         _clearLastDeleted();
     }
-    await loadNotes(); // Reloads all notes and notifies listeners
+    await loadNotes();
   }
 
   Future<void> undoDeleteNote() async {
     if (_lastDeletedNote != null) {
-      await DatabaseHelper.instance.insertNote(_lastDeletedNote!); // Re-insert the note
-      await loadNotes(); // Refresh the list
-      _clearLastDeleted(); // Clear after undo
+      await DatabaseHelper.instance.insertNote(_lastDeletedNote!); 
+      await loadNotes(); 
+      _clearLastDeleted(); 
+    }
+  }
+
+  Future<void> archiveNote(String id, {bool isSwipeArchive = false}) async {
+    Note? noteToArchive;
+    try {
+      noteToArchive = _allNotes.firstWhere((note) => note.id == id);
+    } catch (e) {
+      // print("Note $id not found for archiving: $e");
+      return;
+    }
+
+    if (isSwipeArchive) {
+      _lastArchivedNote = noteToArchive;
+      _clearLastDeleted(); // Clear other undo types
+    }
+
+    Note updatedNote = Note(
+      id: noteToArchive.id,
+      title: noteToArchive.title,
+      content: noteToArchive.content,
+      category: noteToArchive.category,
+      createdAt: noteToArchive.createdAt,
+      modifiedAt: DateTime.now(),
+      isArchived: true, // Set to archived
+      isPinned: noteToArchive.isPinned, 
+      isLocked: noteToArchive.isLocked,
+      colorValue: noteToArchive.colorValue,
+    );
+    await DatabaseHelper.instance.updateNote(updatedNote);
+    _selectedNoteIds.remove(id); // Remove from selection if present
+
+    if (!isSwipeArchive) {
+        _clearLastArchived();
+    }
+    await loadNotes();
+  }
+
+  Future<void> undoArchiveNote() async {
+    if (_lastArchivedNote != null) {
+      Note noteToUnarchive = _lastArchivedNote!;
+      Note updatedNote = Note(
+        id: noteToUnarchive.id,
+        title: noteToUnarchive.title,
+        content: noteToUnarchive.content,
+        category: noteToUnarchive.category,
+        createdAt: noteToUnarchive.createdAt,
+        modifiedAt: DateTime.now(), // Or keep original modifiedAt if preferred on undo
+        isArchived: false, // Set to unarchived
+        isPinned: noteToUnarchive.isPinned,
+        isLocked: noteToUnarchive.isLocked,
+        colorValue: noteToUnarchive.colorValue,
+      );
+      await DatabaseHelper.instance.updateNote(updatedNote);
+      await loadNotes();
+      _clearLastArchived();
     }
   }
 
@@ -122,7 +183,7 @@ class NoteProvider with ChangeNotifier {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
       return b.modifiedAt?.compareTo(a.modifiedAt ?? a.createdAt) ?? 
-             b.createdAt.compareTo(a.createdAt); // Fallback to createdAt if modifiedAt is null
+             b.createdAt.compareTo(a.createdAt);
     });
     return categoryFilteredNotes;
   }
@@ -141,12 +202,14 @@ class NoteProvider with ChangeNotifier {
     }
     _isSelectionMode = _selectedNoteIds.isNotEmpty;
     _clearLastDeleted();
+    _clearLastArchived();
     notifyListeners();
   }
 
   void clearSelection() {
     _clearSelection();
-    _clearLastDeleted(); // Also clear if selection is cleared externally
+    _clearLastDeleted(); 
+    _clearLastArchived();
     notifyListeners();
   }
 
@@ -162,24 +225,11 @@ class NoteProvider with ChangeNotifier {
   Future<void> archiveSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
     for (String noteId in Set.from(_selectedNoteIds)) {
-      Note noteToArchive = _allNotes.firstWhere((note) => note.id == noteId, orElse: () => throw Exception("Note $noteId not found for archiving"));
-      Note updatedNote = Note(
-        id: noteToArchive.id,
-        title: noteToArchive.title,
-        content: noteToArchive.content,
-        category: noteToArchive.category,
-        createdAt: noteToArchive.createdAt,
-        modifiedAt: DateTime.now(),
-        isArchived: true,
-        isPinned: noteToArchive.isPinned, // Pin status should be preserved on archive
-        isLocked: noteToArchive.isLocked,
-        colorValue: noteToArchive.colorValue,
-      );
-      await DatabaseHelper.instance.updateNote(updatedNote);
+      await archiveNote(noteId, isSwipeArchive: false); // Use the new common archiveNote method
     }
-    _clearLastDeleted();
+    _clearLastArchived(); // Ensure this is cleared after bulk operation
     _clearSelection();
-    await loadNotes();
+    await loadNotes(); // loadNotes is called within archiveNote, but an extra one here ensures UI consistency after loop
   }
 
   Future<void> unarchiveSelectedNotes() async {
@@ -200,7 +250,7 @@ class NoteProvider with ChangeNotifier {
       );
       await DatabaseHelper.instance.updateNote(updatedNote);
     }
-    _clearLastDeleted();
+    _clearLastArchived();
     _clearSelection();
     await loadNotes();
   }
@@ -223,15 +273,15 @@ class NoteProvider with ChangeNotifier {
     }
 
     if (hasLockedNote) {
-      notifyListeners(); // To allow UI to react (e.g. show dialog)
+      notifyListeners(); 
       return false;
     }
 
     for (String id in Set.from(_selectedNoteIds)) {
-      // This is a bulk delete, so not for swipe-undo.
       await DatabaseHelper.instance.deleteNote(id);
     }
     _clearLastDeleted(); 
+    _clearLastArchived();
     _clearSelection();
     await loadNotes();
     return true;
@@ -252,6 +302,7 @@ class NoteProvider with ChangeNotifier {
     );
     await DatabaseHelper.instance.updateNote(updatedNote);
     _clearLastDeleted();
+    _clearLastArchived();
     await loadNotes();
   }
 
@@ -287,7 +338,8 @@ class NoteProvider with ChangeNotifier {
       } catch (e) { /* Error finding or updating note */ }
     }
     _clearLastDeleted();
-    clearSelection(); // This also calls loadNotes eventually via clearSelection -> loadNotes
+    _clearLastArchived();
+    clearSelection(); 
     await loadNotes(); 
   }
 
@@ -319,6 +371,7 @@ class NoteProvider with ChangeNotifier {
       await DatabaseHelper.instance.updateNote(updatedNote);
     }
     _clearLastDeleted();
+    _clearLastArchived();
     await loadNotes(); 
   }
 
@@ -350,6 +403,7 @@ class NoteProvider with ChangeNotifier {
 
     if (changed) {
       _clearLastDeleted();
+      _clearLastArchived();
       await loadNotes();
     }
     clearSelection(); 
@@ -384,6 +438,7 @@ class NoteProvider with ChangeNotifier {
 
     if (changed) {
       _clearLastDeleted();
+      _clearLastArchived();
       await loadNotes();
     }
     clearSelection();
@@ -419,6 +474,7 @@ class NoteProvider with ChangeNotifier {
 
     if (changed) {
       _clearLastDeleted();
+      _clearLastArchived();
       await loadNotes();
     }
     clearSelection();
