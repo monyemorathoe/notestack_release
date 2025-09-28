@@ -610,7 +610,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('Settings', style: Theme.of(context).appBarTheme.titleTextStyle),
         centerTitle: true,
       ),
       body: Padding(

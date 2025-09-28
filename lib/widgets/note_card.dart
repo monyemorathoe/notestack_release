@@ -47,11 +47,11 @@ class _NoteCardState extends State<NoteCard> {
     final isSelected = noteProvider.isNoteSelected(widget.note.id);
     final theme = Theme.of(context);
 
-    Color C_cardBackground; // Effective card background color
-    Color C_titleText; // Effective color for title
-    Color C_subtitleText; // Effective color for subtitle/content preview
-    Color C_dateText; // Effective color for date
-    Color C_statusIcon; // Effective color for status icons (pin, lock)
+    Color cCardbackground; // Effective card background color
+    Color cTitletext; // Effective color for title
+    Color cSubtitletext; // Effective color for subtitle/content preview
+    Color cDatetext; // Effective color for date
+    Color cStatusicon; // Effective color for status icons (pin, lock)
 
     bool hasCustomNoteColor = widget.note.colorValue != null;
 
@@ -59,49 +59,49 @@ class _NoteCardState extends State<NoteCard> {
       final noteColor = Color(widget.note.colorValue!);
       if (theme.brightness == Brightness.dark) {
         // Dark Mode: Blend note color with a dark surface
-        C_cardBackground = Color.alphaBlend(noteColor.withAlpha((255 * 0.4).round()), theme.cardTheme.color ?? theme.cardColor);
+        cCardbackground = Color.alphaBlend(noteColor.withAlpha((255 * 0.4).round()), theme.cardTheme.color ?? theme.cardColor);
       } else {
         // Light Mode: Use note color, maybe with slight transparency if it can be too vivid
-        C_cardBackground = noteColor.withAlpha((255 * 0.85).round()); // Adjust opacity as needed
+        cCardbackground = noteColor.withAlpha((255 * 0.85).round()); // Adjust opacity as needed
       }
 
       // Determine text/icon colors based on the contrast with C_cardBackground
-      final cardBrightness = ThemeData.estimateBrightnessForColor(C_cardBackground);
+      final cardBrightness = ThemeData.estimateBrightnessForColor(cCardbackground);
       if (cardBrightness == Brightness.dark) {
-        C_titleText = Colors.white;
-        C_subtitleText = Colors.white70;
-        C_dateText = Colors.white60;
-        C_statusIcon = Colors.white70;
+        cTitletext = Colors.white;
+        cSubtitletext = Colors.white70;
+        cDatetext = Colors.white60;
+        cStatusicon = Colors.white70;
       } else {
-        C_titleText = Colors.black87;
-        C_subtitleText = Colors.black54;
-        C_dateText = Colors.black45;
-        C_statusIcon = Colors.black54;
+        cTitletext = Colors.black87;
+        cSubtitletext = Colors.black54;
+        cDatetext = Colors.black45;
+        cStatusicon = Colors.black54;
       }
     } else {
       // No custom note color: Use theme defaults
-      C_cardBackground = theme.cardTheme.color ?? theme.cardColor;
-      C_titleText = theme.textTheme.titleMedium?.color ?? theme.colorScheme.onSurface;
-      C_subtitleText = theme.textTheme.bodyMedium?.color ?? theme.colorScheme.onSurfaceVariant;
-      C_dateText = theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurfaceVariant.withAlpha((255 * 0.8).round());
-      C_statusIcon = theme.colorScheme.secondary;
+      cCardbackground = theme.cardTheme.color ?? theme.cardColor;
+      cTitletext = theme.textTheme.titleMedium?.color ?? theme.colorScheme.onSurface;
+      cSubtitletext = theme.textTheme.bodyMedium?.color ?? theme.colorScheme.onSurfaceVariant;
+      cDatetext = theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurfaceVariant.withAlpha((255 * 0.8).round());
+      cStatusicon = theme.colorScheme.secondary;
     }
 
     // Selection highlight overrides background and potentially text/icon colors
     if (isSelected) {
-      C_cardBackground = theme.colorScheme.primary.withAlpha(60); // More opaque selection
-      final selectionBrightness = ThemeData.estimateBrightnessForColor(C_cardBackground);
+      cCardbackground = theme.colorScheme.primary.withAlpha(60); // More opaque selection
+      final selectionBrightness = ThemeData.estimateBrightnessForColor(cCardbackground);
       if (selectionBrightness == Brightness.dark) {
-        C_titleText = Colors.white;
-        C_subtitleText = Colors.white70;
-        C_dateText = Colors.white60;
-        C_statusIcon = Colors.white70;
+        cTitletext = Colors.white;
+        cSubtitletext = Colors.white70;
+        cDatetext = Colors.white60;
+        cStatusicon = Colors.white70;
       } else {
         // If selection color is light (e.g. light primary color)
-        C_titleText = theme.colorScheme.onPrimaryContainer;
-        C_subtitleText = theme.colorScheme.onPrimaryContainer.withAlpha((255 * 0.8).round());
-        C_dateText = theme.colorScheme.onPrimaryContainer.withAlpha((255 * 0.7).round());
-        C_statusIcon = theme.colorScheme.onPrimaryContainer.withAlpha((255 * 0.8).round());
+        cTitletext = theme.colorScheme.onPrimaryContainer;
+        cSubtitletext = theme.colorScheme.onPrimaryContainer.withAlpha((255 * 0.8).round());
+        cDatetext = theme.colorScheme.onPrimaryContainer.withAlpha((255 * 0.7).round());
+        cStatusicon = theme.colorScheme.onPrimaryContainer.withAlpha((255 * 0.8).round());
       }
     }
 
@@ -121,11 +121,11 @@ class _NoteCardState extends State<NoteCard> {
     } else {
       List<Widget> statusIcons = [];
       if (widget.note.isPinned) {
-        statusIcons.add(Icon(Icons.push_pin, size: 20, color: C_statusIcon));
+        statusIcons.add(Icon(Icons.push_pin, size: 20, color: cStatusicon));
       }
       if (widget.note.isLocked) {
         if (statusIcons.isNotEmpty) statusIcons.add(const SizedBox(width: 8));
-        statusIcons.add(Icon(Icons.lock_outline, size: 20, color: C_statusIcon));
+        statusIcons.add(Icon(Icons.lock_outline, size: 20, color: cStatusicon));
       }
       if (statusIcons.isNotEmpty) {
         trailingWidget = Row(mainAxisSize: MainAxisSize.min, children: statusIcons);
@@ -140,7 +140,7 @@ class _NoteCardState extends State<NoteCard> {
         aspectRatio: 1, // Ensures the card is square or a defined aspect ratio
         child: Card(
           margin: const EdgeInsets.all(4), // Margin for grid view card
-          color: C_cardBackground,
+          color: cCardbackground,
           clipBehavior: Clip.antiAlias, // Ensures InkWell splash is contained
           shape: isSelected
               ? RoundedRectangleBorder(
@@ -180,11 +180,11 @@ class _NoteCardState extends State<NoteCard> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (widget.note.isPinned)
-                          Icon(Icons.push_pin, size: 20, color: C_statusIcon),
+                          Icon(Icons.push_pin, size: 20, color: cStatusicon),
                         if (widget.note.isLocked)
                           Padding(
                             padding: const EdgeInsets.only(left: 6),
-                            child: Icon(Icons.lock_outline, size: 20, color: C_statusIcon),
+                            child: Icon(Icons.lock_outline, size: 20, color: cStatusicon),
                           ),
                       ],
                     ),
@@ -198,7 +198,7 @@ class _NoteCardState extends State<NoteCard> {
                         padding: const EdgeInsets.only(right: 32), // leave space for icons
                         child: Text(
                           widget.note.title.isEmpty ? 'Untitled' : widget.note.title,
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: C_titleText),
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: cTitletext),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -210,7 +210,7 @@ class _NoteCardState extends State<NoteCard> {
                             ? Center(
                                 child: Text(
                                   'Unlock to view content',
-                                  style: TextStyle(fontStyle: FontStyle.italic, color: C_subtitleText),
+                                  style: TextStyle(fontStyle: FontStyle.italic, color: cSubtitletext),
                                   maxLines: 2,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
@@ -218,7 +218,7 @@ class _NoteCardState extends State<NoteCard> {
                               )
                             : Text(
                                 plainTextContent,
-                                style: TextStyle(color: C_subtitleText, fontSize: 14),
+                                style: TextStyle(color: cSubtitletext, fontSize: 14),
                                 maxLines: 3,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -228,7 +228,7 @@ class _NoteCardState extends State<NoteCard> {
                         alignment: Alignment.bottomLeft,
                         child: Text(
                           'Created: ${DateFormat.yMMMd().format(widget.note.createdAt)}',
-                          style: TextStyle(color: C_dateText, fontSize: 12),
+                          style: TextStyle(color: cDatetext, fontSize: 12),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -259,7 +259,7 @@ class _NoteCardState extends State<NoteCard> {
 
       return Card(
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        color: C_cardBackground,
+        color: cCardbackground,
         shape: cardShape,
         clipBehavior: Clip.antiAlias, // Ensures InkWell splash is contained
         child: InkWell(
@@ -290,7 +290,7 @@ class _NoteCardState extends State<NoteCard> {
                     children: [
                       Text(
                         widget.note.title.isEmpty ? 'Untitled' : widget.note.title,
-                        style: TextStyle(fontWeight: FontWeight.bold, color: C_titleText),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: cTitletext),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -298,20 +298,20 @@ class _NoteCardState extends State<NoteCard> {
                       widget.note.isLocked
                           ? Text(
                               'Unlock to view content',
-                              style: TextStyle(fontStyle: FontStyle.italic, color: C_subtitleText),
+                              style: TextStyle(fontStyle: FontStyle.italic, color: cSubtitletext),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             )
                           : Text(
                               plainTextContent,
-                              style: TextStyle(color: C_subtitleText),
+                              style: TextStyle(color: cSubtitletext),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                       const SizedBox(height: 4),
                       Text(
                         'Created: ${DateFormat.yMMMd().format(widget.note.createdAt)}',
-                        style: TextStyle(color: C_dateText, fontSize: theme.textTheme.bodySmall?.fontSize),
+                        style: TextStyle(color: cDatetext, fontSize: theme.textTheme.bodySmall?.fontSize),
                       ),
                     ],
                   ),

@@ -888,9 +888,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             title: Text(
               isSelectionMode ? '$selectedCount selected' : 'NoteStack',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).appBarTheme.titleTextStyle,
             ),
             centerTitle: true,
             actions: isSelectionMode

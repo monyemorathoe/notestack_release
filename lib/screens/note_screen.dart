@@ -22,6 +22,8 @@ class NoteScreenState extends State<NoteScreen> {
   final _titleController = TextEditingController();
   late QuillController _quillController;
   final _passwordController = TextEditingController();
+  final FocusNode _quillFocusNode = FocusNode(); // Add focus node for QuillEditor
+  final FocusNode _titleFocusNode = FocusNode(); // Add focus node for title
   final SecureStorageService _secureStorageService = SecureStorageService();
   String _selectedCategory = 'Personal';
   int? _selectedColorValue;
@@ -30,6 +32,8 @@ class NoteScreenState extends State<NoteScreen> {
   bool _isTemporarilyUnlocked = false;
   bool _showToolbar = false; // Start collapsed by default
   bool _showCategoryDropdown = false;
+  late bool _isEmpty;
+  late bool _hasFocus;
 
   final List<Color> _defaultColors = [
     Colors.red[200]!, Colors.orange[200]!, Colors.yellow[200]!,
@@ -42,6 +46,23 @@ class NoteScreenState extends State<NoteScreen> {
   void initState() {
     super.initState();
     _initializeNote();
+    _isEmpty = _quillController.document.isEmpty();
+    _hasFocus = _quillFocusNode.hasFocus;
+    _quillController.addListener(_onQuillChanged);
+    _quillFocusNode.addListener(_onQuillChanged);
+  }
+
+  void _onQuillChanged() {
+    final newIsEmpty = _quillController.document.isEmpty();
+    final newHasFocus = _quillFocusNode.hasFocus;
+    if (newIsEmpty != _isEmpty || newHasFocus != _hasFocus) {
+      if (mounted) {
+        setState(() {
+          _isEmpty = newIsEmpty;
+          _hasFocus = newHasFocus;
+        });
+      }
+    }
   }
 
   void _initializeNote() {
@@ -77,8 +98,12 @@ class NoteScreenState extends State<NoteScreen> {
   @override
   void dispose() {
     _titleController.dispose();
+    _quillController.removeListener(_onQuillChanged);
+    _quillFocusNode.removeListener(_onQuillChanged);
     _quillController.dispose();
     _passwordController.dispose();
+    _quillFocusNode.dispose(); // Dispose focus node
+    _titleFocusNode.dispose(); // Dispose title focus node
     super.dispose();
   }
 
@@ -313,7 +338,7 @@ class NoteScreenState extends State<NoteScreen> {
     if (password.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password cannot be empty')));
+            const SnackBar(content: Text('Password cannot be empty')));
       }
       return;
     }
@@ -354,8 +379,10 @@ class NoteScreenState extends State<NoteScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.note == null ? 'New Note' : 'Edit Note',
-            style: TextStyle(color: appBarForegroundColor)),
+        title: Text(
+          widget.note == null ? 'New Note' : 'Edit Note',
+          style: Theme.of(context).appBarTheme.titleTextStyle,
+        ),
         backgroundColor: appBarColor,
         elevation: _selectedColorValue != null ? 0 : null,
         iconTheme: IconThemeData(color: appBarForegroundColor),
@@ -403,24 +430,60 @@ class NoteScreenState extends State<NoteScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        TextField(
-                          controller: _titleController,
-                          decoration: const InputDecoration(
-                            hintText: 'Title',
-                            border: InputBorder.none,
-                            contentPadding: EdgeInsets.zero,
+                        GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () {
+                            if (!_titleFocusNode.hasFocus) {
+                              _titleFocusNode.requestFocus();
+                            }
+                          },
+                          child: TextField(
+                            controller: _titleController,
+                            focusNode: _titleFocusNode,
+                            decoration: const InputDecoration(
+                              hintText: 'Title',
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.only(left: 16.0), // Applied left padding
+                            ),
+                            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
+                            textCapitalization: TextCapitalization.sentences,
                           ),
-                          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-                          textCapitalization: TextCapitalization.sentences,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12), // Increased padding
                         const Divider(height: 1),
                         const SizedBox(height: 12),
                         Expanded(
-                          child: QuillEditor.basic(
-                            controller: _quillController,
-                            config: const QuillEditorConfig(
-                              padding: EdgeInsets.zero,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.translucent,
+                            onTap: () {
+                              if (!_quillFocusNode.hasFocus) {
+                                _quillFocusNode.requestFocus();
+                              }
+                            },
+                            child: Stack(
+                              children: [
+                                QuillEditor.basic(
+                                  controller: _quillController,
+                                  focusNode: _quillFocusNode,
+                                  config: const QuillEditorConfig(
+                                    padding: EdgeInsets.only(left: 16.0),
+                                  ),
+                                ),
+                                // Hint text overlay (no IgnorePointer)
+                                if (_isEmpty && !_hasFocus)
+                                  Positioned.fill(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(left: 16),
+                                      child: Text(
+                                        'Start writing your note...',
+                                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                          color: Theme.of(context).hintColor.withOpacity(0.7),
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                           ),
                         ),

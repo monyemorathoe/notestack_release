@@ -241,9 +241,7 @@ class _ArchivesScreenState extends State<ArchivesScreen> {
                 : null, // Defaults to back arrow
             title: Text(
               isSelectionMode ? '$selectedCount selected' : 'Archives',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-              ),
+              style: Theme.of(context).appBarTheme.titleTextStyle,
             ),
             centerTitle: true,
             // Optionally add actions like view toggle here if needed in the future

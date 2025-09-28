@@ -17,7 +17,7 @@ dependencies:
   provider: ^6.1.2
   animate_do: ^3.3.4
   intl: ^0.20.2
-  google_fonts: ^6.2.1
+  # google_fonts: ^6.2.1 # Removed
   uuid: ^4.5.0
   path: ^1.9.0 # Added path dependency
   flutter_secure_storage: ^9.0.0
@@ -41,3 +41,52 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  fonts:
+    - family: Poppins
+      fonts:
+        - asset: assets/Poppins-Thin.ttf
+          weight: 100
+        - asset: assets/Poppins-ThinItalic.ttf
+          weight: 100
+          style: italic
+        - asset: assets/Poppins-ExtraLight.ttf
+          weight: 200
+        - asset: assets/Poppins-ExtraLightItalic.ttf
+          weight: 200
+          style: italic
+        - asset: assets/Poppins-Light.ttf
+          weight: 300
+        - asset: assets/Poppins-LightItalic.ttf
+          weight: 300
+          style: italic
+        - asset: assets/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/Poppins-Italic.ttf
+          weight: 400
+          style: italic
+        - asset: assets/Poppins-Medium.ttf
+          weight: 500
+        - asset: assets/Poppins-MediumItalic.ttf
+          weight: 500
+          style: italic
+        - asset: assets/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/Poppins-SemiBoldItalic.ttf
+          weight: 600
+          style: italic
+        - asset: assets/Poppins-Bold.ttf
+          weight: 700
+        - asset: assets/Poppins-BoldItalic.ttf
+          weight: 700
+          style: italic
+        - asset: assets/Poppins-ExtraBold.ttf
+          weight: 800
+        - asset: assets/Poppins-ExtraBoldItalic.ttf
+          weight: 800
+          style: italic
+        - asset: assets/Poppins-Black.ttf
+          weight: 900
+        - asset: assets/Poppins-BlackItalic.ttf
+          weight: 900
+          style: italic

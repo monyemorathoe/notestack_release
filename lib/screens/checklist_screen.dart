@@ -76,7 +76,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
 
   Widget _buildChecklistItem(ChecklistItem item, int itemIndex, ChecklistProvider provider, ThemeData theme, bool isDragging) {
     Color cardBackgroundColor = isDragging
-        ? theme.colorScheme.primaryContainer.withOpacity(0.5)
+        ? theme.colorScheme.primaryContainer.withAlpha((0.5 * 255).round())
         : (theme.cardTheme.color ?? theme.cardColor);
     
     TextStyle titleStyle = TextStyle(
@@ -96,7 +96,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
     if (!_swipeToDeleteChecklistsEnabled) {
       trailingWidgets.add(
         IconButton(
-          icon: Icon(Icons.delete_outline, color: theme.colorScheme.error.withOpacity(0.8)),
+          icon: Icon(Icons.delete_outline, color: theme.colorScheme.error.withAlpha((0.8 * 255).round())),
           tooltip: 'Delete Task',
           onPressed: () {
             final itemTitle = item.title; 
@@ -143,7 +143,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                 onTap: () => provider.toggleDone(item.id),
                 child: Icon(
                   item.isDone ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: item.isDone ? theme.colorScheme.primary : theme.iconTheme.color?.withOpacity(0.7),
+                  color: item.isDone ? theme.colorScheme.primary : theme.iconTheme.color?.withAlpha((0.7 * 255).round()),
                   size: 24,
                 ),
               ),
@@ -209,7 +209,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Checklist', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text('Checklist', style: Theme.of(context).appBarTheme.titleTextStyle),
         centerTitle: true,
         actions: const [],
       ),
@@ -252,7 +252,7 @@ class _ChecklistScreenState extends State<ChecklistScreen> {
                     final item = itemsFromProvider[index];
                     return AnimatedBuilder(
                       animation: animation,
-                      builder: (BuildContext context, Widget? _child) {
+                      builder: (BuildContext context, Widget? child) {
                         return _buildChecklistItem(item, index, Provider.of<ChecklistProvider>(context, listen: false), theme, true);
                       },
                       child: child,
