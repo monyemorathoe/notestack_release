@@ -1,4 +1,6 @@
+import 'dart:convert'; // Added for jsonDecode
 import 'package:flutter/material.dart';
+import 'package:flutter_quill/flutter_quill.dart'; // Added for Document
 import '../models/note.dart';
 import '../services/database_helper.dart';
 import 'package:uuid/uuid.dart';
@@ -27,6 +29,22 @@ class NoteProvider with ChangeNotifier {
     loadNotes();
   }
 
+  // Helper to convert Quill Delta JSON string to plain text
+  String _getPlainTextFromDeltaJson(String deltaJson) {
+    if (deltaJson.isEmpty) {
+      return '';
+    }
+    try {
+      final List<dynamic> jsonData = jsonDecode(deltaJson);
+      final doc = Document.fromJson(jsonData);
+      return doc.toPlainText().trim();
+    } catch (e) {
+      // Fallback for old plain text data or if JSON is invalid
+      // print("Error decoding JSON in provider, using raw content: $e");
+      return deltaJson.trim(); 
+    }
+  }
+
   void _clearLastDeleted() {
     _lastDeletedNote = null;
   }
@@ -48,14 +66,17 @@ class NoteProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> addNote(String title, String content, String category, {DateTime? createdAt, int? colorValue}) async {
+  Future<void> addNote(String title, String contentJson, String category, {DateTime? createdAt, int? colorValue}) async {
+    final plainTextContent = _getPlainTextFromDeltaJson(contentJson);
+    final now = createdAt ?? DateTime.now();
     final note = Note(
       id: const Uuid().v4(),
       title: title,
-      content: content,
+      content: contentJson,
+      plainTextContent: plainTextContent,
       category: category,
-      createdAt: createdAt ?? DateTime.now(),
-      modifiedAt: createdAt ?? DateTime.now(), 
+      createdAt: now,
+      modifiedAt: now, 
       isArchived: false,
       isPinned: false,
       isLocked: false,
@@ -68,10 +89,14 @@ class NoteProvider with ChangeNotifier {
   }
 
   Future<void> updateNote(Note note) async {
+    // When a note is fundamentally updated (e.g. title or content change),
+    // its plainTextContent is re-derived from the main content.
+    final plainTextContent = _getPlainTextFromDeltaJson(note.content);
     final Note noteToUpdate = Note(
       id: note.id,
       title: note.title,
       content: note.content,
+      plainTextContent: plainTextContent, // Ensure this is passed
       category: note.category,
       createdAt: note.createdAt,
       modifiedAt: DateTime.now(),
@@ -120,29 +145,29 @@ class NoteProvider with ChangeNotifier {
     try {
       noteToArchive = _allNotes.firstWhere((note) => note.id == id);
     } catch (e) {
-      // print("Note $id not found for archiving: $e");
       return;
     }
 
     if (isSwipeArchive) {
       _lastArchivedNote = noteToArchive;
-      _clearLastDeleted(); // Clear other undo types
+      _clearLastDeleted(); 
     }
-
+    // For archiving, content doesn't change, so plainTextContent is carried over.
     Note updatedNote = Note(
       id: noteToArchive.id,
       title: noteToArchive.title,
       content: noteToArchive.content,
+      plainTextContent: noteToArchive.plainTextContent, // Carry over existing plainTextContent
       category: noteToArchive.category,
       createdAt: noteToArchive.createdAt,
       modifiedAt: DateTime.now(),
-      isArchived: true, // Set to archived
+      isArchived: true, 
       isPinned: noteToArchive.isPinned, 
       isLocked: noteToArchive.isLocked,
       colorValue: noteToArchive.colorValue,
     );
     await DatabaseHelper.instance.updateNote(updatedNote);
-    _selectedNoteIds.remove(id); // Remove from selection if present
+    _selectedNoteIds.remove(id); 
 
     if (!isSwipeArchive) {
         _clearLastArchived();
@@ -153,14 +178,16 @@ class NoteProvider with ChangeNotifier {
   Future<void> undoArchiveNote() async {
     if (_lastArchivedNote != null) {
       Note noteToUnarchive = _lastArchivedNote!;
+      // For undoing archive, content doesn't change, so plainTextContent is carried over.
       Note updatedNote = Note(
         id: noteToUnarchive.id,
         title: noteToUnarchive.title,
         content: noteToUnarchive.content,
+        plainTextContent: noteToUnarchive.plainTextContent, // Carry over existing plainTextContent
         category: noteToUnarchive.category,
         createdAt: noteToUnarchive.createdAt,
-        modifiedAt: DateTime.now(), // Or keep original modifiedAt if preferred on undo
-        isArchived: false, // Set to unarchived
+        modifiedAt: DateTime.now(), 
+        isArchived: false, 
         isPinned: noteToUnarchive.isPinned,
         isLocked: noteToUnarchive.isLocked,
         colorValue: noteToUnarchive.colorValue,
@@ -182,15 +209,16 @@ class NoteProvider with ChangeNotifier {
     categoryFilteredNotes.sort((a, b) {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;
-      return b.modifiedAt?.compareTo(a.modifiedAt ?? a.createdAt) ?? 
-             b.createdAt.compareTo(a.createdAt);
+      final modCompare = (b.modifiedAt ?? b.createdAt).compareTo(a.modifiedAt ?? a.createdAt);
+      if (modCompare != 0) return modCompare;
+      return b.createdAt.compareTo(a.createdAt);
     });
     return categoryFilteredNotes;
   }
 
   List<Note> get archivedNotes {
     return _allNotes.where((note) => note.isArchived).toList()..sort((a,b) => 
-        b.modifiedAt?.compareTo(a.modifiedAt ?? a.createdAt) ?? b.createdAt.compareTo(a.createdAt)
+        (b.modifiedAt ?? b.createdAt).compareTo(a.modifiedAt ?? a.createdAt)
     );
   }
 
@@ -225,21 +253,23 @@ class NoteProvider with ChangeNotifier {
   Future<void> archiveSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
     for (String noteId in Set.from(_selectedNoteIds)) {
-      await archiveNote(noteId, isSwipeArchive: false); // Use the new common archiveNote method
+      await archiveNote(noteId, isSwipeArchive: false); 
     }
-    _clearLastArchived(); // Ensure this is cleared after bulk operation
+    _clearLastArchived(); 
     _clearSelection();
-    await loadNotes(); // loadNotes is called within archiveNote, but an extra one here ensures UI consistency after loop
+    await loadNotes(); 
   }
 
   Future<void> unarchiveSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
     for (String noteId in Set.from(_selectedNoteIds)) {
       Note noteToUnarchive = _allNotes.firstWhere((note) => note.id == noteId, orElse: () => throw Exception("Note $noteId not found for unarchiving"));
+      // For unarchiving, content doesn't change, so plainTextContent is carried over.
       Note updatedNote = Note(
         id: noteToUnarchive.id,
         title: noteToUnarchive.title,
         content: noteToUnarchive.content,
+        plainTextContent: noteToUnarchive.plainTextContent, // Carry over existing plainTextContent
         category: noteToUnarchive.category,
         createdAt: noteToUnarchive.createdAt,
         modifiedAt: DateTime.now(),
@@ -288,10 +318,12 @@ class NoteProvider with ChangeNotifier {
   }
 
   Future<void> togglePinNote(Note note) async {
+    // For toggling pin, content doesn't change, so plainTextContent is carried over.
     final Note updatedNote = Note(
       id: note.id,
       title: note.title,
       content: note.content,
+      plainTextContent: note.plainTextContent, // Carry over existing plainTextContent
       category: note.category,
       createdAt: note.createdAt,
       modifiedAt: DateTime.now(),
@@ -321,10 +353,12 @@ class NoteProvider with ChangeNotifier {
       try {
         Note currentNote = _allNotes.firstWhere((note) => note.id == id);
         if (currentNote.isLocked != lock) {
+          // For locking/unlocking, content doesn't change, so plainTextContent is carried over.
           Note updatedNote = Note(
             id: currentNote.id,
             title: currentNote.title,
             content: currentNote.content,
+            plainTextContent: currentNote.plainTextContent, // Carry over existing plainTextContent
             category: currentNote.category,
             createdAt: currentNote.createdAt,
             modifiedAt: DateTime.now(),
@@ -356,10 +390,12 @@ class NoteProvider with ChangeNotifier {
     if (notesToUnlock.isEmpty) return;
 
     for (Note currentNote in notesToUnlock) {
+      // For unlocking, content doesn't change, so plainTextContent is carried over.
       Note updatedNote = Note(
         id: currentNote.id,
         title: currentNote.title,
         content: currentNote.content,
+        plainTextContent: currentNote.plainTextContent, // Carry over existing plainTextContent
         category: currentNote.category,
         createdAt: currentNote.createdAt,
         modifiedAt: DateTime.now(),
@@ -383,10 +419,12 @@ class NoteProvider with ChangeNotifier {
       try {
         final originalNote = _allNotes.firstWhere((n) => n.id == noteId);
         if (!originalNote.isPinned) {
+          // For pinning, content doesn't change, so plainTextContent is carried over.
           final Note updatedNote = Note(
             id: originalNote.id,
             title: originalNote.title,
             content: originalNote.content,
+            plainTextContent: originalNote.plainTextContent, // Carry over existing plainTextContent
             category: originalNote.category,
             createdAt: originalNote.createdAt,
             modifiedAt: DateTime.now(), 
@@ -418,10 +456,12 @@ class NoteProvider with ChangeNotifier {
       try {
         final originalNote = _allNotes.firstWhere((n) => n.id == noteId);
         if (originalNote.isPinned) {
+          // For unpinning, content doesn't change, so plainTextContent is carried over.
           final Note updatedNote = Note(
             id: originalNote.id,
             title: originalNote.title,
             content: originalNote.content,
+            plainTextContent: originalNote.plainTextContent, // Carry over existing plainTextContent
             category: originalNote.category,
             createdAt: originalNote.createdAt,
             modifiedAt: DateTime.now(),
@@ -454,10 +494,12 @@ class NoteProvider with ChangeNotifier {
       try {
         final originalNote = _allNotes.firstWhere((n) => n.id == id);
         if (originalNote.colorValue != colorValue) {
+          // For setting color, content doesn't change, so plainTextContent is carried over.
           Note updatedNote = Note(
             id: originalNote.id,
             title: originalNote.title,
             content: originalNote.content,
+            plainTextContent: originalNote.plainTextContent, // Carry over existing plainTextContent
             category: originalNote.category,
             createdAt: originalNote.createdAt,
             modifiedAt: DateTime.now(),

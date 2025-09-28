@@ -163,6 +163,7 @@ class NoteScreenState extends State<NoteScreen> {
         modifiedAt: now, isArchived: widget.note!.isArchived,
         isPinned: widget.note!.isPinned, isLocked: widget.note!.isLocked,
         colorValue: _selectedColorValue,
+        plainTextContent: _quillController.document.toPlainText(),
       ));
     }
     if (mounted) Navigator.pop(context);
@@ -529,7 +530,7 @@ class NoteScreenState extends State<NoteScreen> {
                                       child: Text(
                                         'Start writing your note...',
                                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                          color: Theme.of(context).hintColor.withOpacity(0.7),
+                                          color: Theme.of(context).hintColor.withAlpha((0.7 * 255).round()),
                                           fontStyle: FontStyle.italic,
                                         ),
                                       ),

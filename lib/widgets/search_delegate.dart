@@ -29,19 +29,31 @@ class NotesSearchDelegate extends SearchDelegate<Note?> {
 
   @override
   List<Widget>? buildActions(BuildContext context) {
-    return [
-      if (query.isNotEmpty)
-        IconButton(
-          icon: const Icon(Icons.clear),
-          tooltip: 'Clear query',
-          onPressed: () {
-            query = '';
-            showSuggestions(context); // Refresh suggestions
-          },
+    if (query.isEmpty) {
+      return [Container()]; // Empty container if query is empty
+    }
+
+    Widget clearButton = IconButton(
+      icon: const Icon(Icons.clear),
+      tooltip: 'Clear query',
+      onPressed: () {
+        query = '';
+        showSuggestions(context); // Refresh suggestions
+      },
+    );
+
+    if (Platform.isWindows) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(right: 10.0),
+          child: Row(
+            children: [clearButton],
+          ),
         )
-      else
-        Container(), // Empty container if query is empty
-    ];
+      ];
+    } else {
+      return [clearButton];
+    }
   }
 
   @override

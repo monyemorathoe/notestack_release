@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert'; // Added for jsonDecode
+import 'package:flutter_quill/flutter_quill.dart'; // Added for Document
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/note.dart';
@@ -8,7 +10,7 @@ class DatabaseHelper {
   static Database? _database;
 
   static const String _databaseName = "notes.db";
-  static final int _databaseVersion = 2; // <<< VERSION IS NOW 2
+  static final int _databaseVersion = 3; // <<< VERSION IS NOW 3
 
   DatabaseHelper._init();
 
@@ -24,7 +26,7 @@ class DatabaseHelper {
       path,
       version: _databaseVersion,
       onCreate: _createDB,
-      onUpgrade: _onUpgrade, // <<< ENSURED onUpgrade IS CALLED
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -33,10 +35,11 @@ class DatabaseHelper {
       CREATE TABLE notes(
         id TEXT PRIMARY KEY,
         title TEXT NOT NULL,
-        content TEXT NOT NULL,
+        content TEXT NOT NULL, -- Raw Quill Delta JSON
+        plainTextContent TEXT NOT NULL DEFAULT '', -- For search
         category TEXT NOT NULL,
         createdAt TEXT NOT NULL,
-        modifiedAt TEXT, 
+        modifiedAt TEXT,
         isArchived INTEGER NOT NULL DEFAULT 0,
         isPinned INTEGER NOT NULL DEFAULT 0,
         isLocked INTEGER NOT NULL DEFAULT 0,
@@ -45,26 +48,54 @@ class DatabaseHelper {
     ''');
   }
 
-  // <<< NEW/UPDATED onUpgrade METHOD
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       try {
         await db.execute("ALTER TABLE notes ADD COLUMN modifiedAt TEXT;");
-        // print("Column modifiedAt added.");
       } catch (e) {
         // print("Failed to add modifiedAt or it already exists: $e");
       }
       try {
         await db.execute("ALTER TABLE notes ADD COLUMN colorValue INTEGER;");
-        // print("Column colorValue added.");
       } catch (e) {
         // print("Failed to add colorValue or it already exists: $e");
       }
     }
-    // For future versions:
-    // if (oldVersion < 3) {
-    //   // await db.execute("ALTER TABLE notes ADD COLUMN anotherNewColumn TEXT;");
-    // }
+    if (oldVersion < 3) {
+      try {
+        await db.execute("ALTER TABLE notes ADD COLUMN plainTextContent TEXT NOT NULL DEFAULT '';");
+        // print("Column plainTextContent added.");
+
+        List<Map<String, dynamic>> existingNotes = await db.query('notes');
+        for (var noteMap in existingNotes) {
+          String id = noteMap['id'];
+          String jsonContent = noteMap['content'];
+          String plainText = '';
+          try {
+            if (jsonContent.isNotEmpty) {
+              final List<dynamic> jsonData = jsonDecode(jsonContent);
+              final doc = Document.fromJson(jsonData);
+              plainText = doc.toPlainText().trim();
+            }
+          } catch (e) {
+            // If content is not valid JSON delta, it might be old plain text.
+            // Or it might be an error. For simplicity, we'll use the raw content if it's not JSON.
+            // A more robust solution might try to differentiate or log this.
+            plainText = jsonContent.trim(); 
+            // print("Error decoding JSON for note $id, using raw content for plainText: $e");
+          }
+          await db.update(
+            'notes',
+            {'plainTextContent': plainText},
+            where: 'id = ?',
+            whereArgs: [id],
+          );
+        }
+        // print("Populated plainTextContent for existing notes.");
+      } catch (e) {
+        // print("Failed to add plainTextContent column or populate it: $e");
+      }
+    }
   }
 
   Future<void> insertNote(Note note) async {
@@ -74,7 +105,6 @@ class DatabaseHelper {
       note.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    // print('Note inserted: ${note.id}');
   }
 
   Future<Note?> getNoteById(String id) async {
@@ -94,7 +124,7 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
-      orderBy: 'createdAt ASC', // Ensures new notes are last
+      orderBy: 'modifiedAt DESC, createdAt DESC', // Sort by modified, then created
     );
     if (maps.isEmpty) {
       return [];
@@ -111,7 +141,8 @@ class DatabaseHelper {
     }
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
-      where: '(title LIKE ? OR content LIKE ?) AND isArchived = 0',
+      // Search in title and the new plainTextContent column
+      where: '(title LIKE ? OR plainTextContent LIKE ?) AND isArchived = 0',
       whereArgs: ['%$query%', '%$query%'],
       orderBy: 'modifiedAt DESC',
     );
@@ -132,7 +163,6 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [note.id],
     );
-    // print('Note updated: ${note.id}');
   }
 
   Future<void> deleteNote(String id) async {
@@ -142,10 +172,8 @@ class DatabaseHelper {
       where: 'id = ?',
       whereArgs: [id],
     );
-    // print('Note deleted: ${id}');
   }
 
-  // Optional: Method to close the database if needed, though often not explicitly called in Flutter apps
   Future close() async {
     final db = await database;
     db.close();
