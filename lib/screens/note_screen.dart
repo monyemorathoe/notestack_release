@@ -22,8 +22,8 @@ class NoteScreenState extends State<NoteScreen> {
   final _titleController = TextEditingController();
   late QuillController _quillController;
   final _passwordController = TextEditingController();
-  final FocusNode _quillFocusNode = FocusNode(); // Add focus node for QuillEditor
-  final FocusNode _titleFocusNode = FocusNode(); // Add focus node for title
+  final FocusNode _quillFocusNode = FocusNode(); // Focus node for QuillEditor
+  final FocusNode _titleFocusNode = FocusNode(); // Focus node for title
   final SecureStorageService _secureStorageService = SecureStorageService();
   String _selectedCategory = 'Personal';
   int? _selectedColorValue;
@@ -34,6 +34,9 @@ class NoteScreenState extends State<NoteScreen> {
   bool _showCategoryDropdown = false;
   late bool _isEmpty;
   late bool _hasFocus;
+
+  // Persist last applied style so formatting stays "sticky" across focus changes.
+  Map<String, Attribute> _lastStyle = {};
 
   final List<Color> _defaultColors = [
     Colors.red[200]!, Colors.orange[200]!, Colors.yellow[200]!,
@@ -46,20 +49,50 @@ class NoteScreenState extends State<NoteScreen> {
   void initState() {
     super.initState();
     _initializeNote();
+
+    // initial state
     _isEmpty = _quillController.document.isEmpty();
     _hasFocus = _quillFocusNode.hasFocus;
+
+    // listeners
     _quillController.addListener(_onQuillChanged);
-    _quillFocusNode.addListener(_onQuillChanged);
+    _quillFocusNode.addListener(_onFocusChange);
   }
 
+  /// Called whenever the Quill controller changes (selection or document)
   void _onQuillChanged() {
     final newIsEmpty = _quillController.document.isEmpty();
     final newHasFocus = _quillFocusNode.hasFocus;
+
+    // Update ephemeral UI state (hint/empty)
     if (newIsEmpty != _isEmpty || newHasFocus != _hasFocus) {
       if (mounted) {
         setState(() {
           _isEmpty = newIsEmpty;
           _hasFocus = newHasFocus;
+        });
+      }
+    }
+
+    // Capture the current selection style attributes and persist them.
+    // This allows toolbar toggles to be remembered across focus changes.
+    final selectionStyle = _quillController.getSelectionStyle().attributes;
+    _lastStyle = Map<String, Attribute>.from(selectionStyle);
+    if (mounted) setState(() {}); // Also triggers rebuild for word count
+  }
+
+  /// When editor gains focus, reapply the last persisted style so typing continues with it.
+  void _onFocusChange() {
+    final gainedFocus = _quillFocusNode.hasFocus;
+    if (gainedFocus && _lastStyle.isNotEmpty) {
+      _lastStyle.forEach((_, attr) {
+        _quillController.formatSelection(attr);
+      });
+      if (mounted) setState(() {});
+    } else {
+      if (mounted) {
+        setState(() {
+          _hasFocus = gainedFocus;
         });
       }
     }
@@ -89,9 +122,10 @@ class NoteScreenState extends State<NoteScreen> {
       }
       _createdAt = DateTime.now();
     }
+
     _quillController = QuillController(
-        document: document,
-        selection: const TextSelection.collapsed(offset: 0)
+      document: document,
+      selection: const TextSelection.collapsed(offset: 0),
     );
   }
 
@@ -99,11 +133,11 @@ class NoteScreenState extends State<NoteScreen> {
   void dispose() {
     _titleController.dispose();
     _quillController.removeListener(_onQuillChanged);
-    _quillFocusNode.removeListener(_onQuillChanged);
+    _quillFocusNode.removeListener(_onFocusChange);
     _quillController.dispose();
     _passwordController.dispose();
-    _quillFocusNode.dispose(); // Dispose focus node
-    _titleFocusNode.dispose(); // Dispose title focus node
+    _quillFocusNode.dispose();
+    _titleFocusNode.dispose();
     super.dispose();
   }
 
@@ -264,7 +298,6 @@ class NoteScreenState extends State<NoteScreen> {
                   const Icon(Icons.format_color_text, size: 20),
                   const SizedBox(width: 12),
                   const Expanded(child: Text('Formatting Tools')),
-                  // Vertically aligned chevron, matching category selector
                   Icon(_showToolbar ? Icons.expand_less : Icons.expand_more),
                 ],
               ),
@@ -338,7 +371,7 @@ class NoteScreenState extends State<NoteScreen> {
     if (password.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Password cannot be empty')));
+          const SnackBar(content: Text('Password cannot be empty')));
       }
       return;
     }
@@ -356,6 +389,16 @@ class NoteScreenState extends State<NoteScreen> {
     return dateTime != null ? DateFormat.yMMMd().add_jm().format(dateTime) : 'N/A';
   }
 
+  int _getWordCount() {
+    final plainText = _quillController.document.toPlainText().trim();
+    if (plainText.isEmpty) {
+      return 0;
+    }
+    // This regex splits by any sequence of whitespace characters.
+    // .where((s) => s.isNotEmpty) filters out empty strings that might result from multiple spaces.
+    return plainText.split(RegExp(r'\s+')).where((s) => s.isNotEmpty).length;
+  }
+
   @override
   Widget build(BuildContext context) {
     final noteProvider = Provider.of<NoteProvider>(context, listen: false);
@@ -366,22 +409,37 @@ class NoteScreenState extends State<NoteScreen> {
       _selectedCategory = availableCategories.first;
     }
 
-    final theme = Theme.of(context);
+    final ThemeData theme = Theme.of(context);
+    final bool isOverallDarkMode = theme.brightness == Brightness.dark;
     final isEditable = !_isLocked || _isTemporarilyUnlocked;
 
-    // App bar color calculation
     Color appBarColor = _selectedColorValue != null
         ? Color(_selectedColorValue!).withAlpha((0.7 * 255).toInt())
         : theme.appBarTheme.backgroundColor ?? theme.colorScheme.primary;
 
-    Color appBarForegroundColor = ThemeData.estimateBrightnessForColor(appBarColor) == Brightness.dark
-        ? Colors.white : Colors.black;
+    Color appBarForegroundColor;
+    if (isOverallDarkMode) {
+      appBarForegroundColor = Colors.white;
+    } else {
+      appBarForegroundColor = ThemeData.estimateBrightnessForColor(appBarColor) == Brightness.dark
+          ? Colors.white
+          : Colors.black;
+    }
+    
+    TextStyle appBarTitleTextStyle = theme.appBarTheme.titleTextStyle?.copyWith(
+      color: appBarForegroundColor
+    ) ?? TextStyle(color: appBarForegroundColor);
+    
+    final int wordCount = _getWordCount(); // Calculate word count for the build
+    final TextStyle? bottomTextStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurface.withAlpha((0.75 * 255).round())
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: Text(
           widget.note == null ? 'New Note' : 'Edit Note',
-          style: Theme.of(context).appBarTheme.titleTextStyle,
+          style: appBarTitleTextStyle,
         ),
         backgroundColor: appBarColor,
         elevation: _selectedColorValue != null ? 0 : null,
@@ -414,13 +472,8 @@ class NoteScreenState extends State<NoteScreen> {
           padding: const EdgeInsets.all(16.0),
           child: !isEditable ? _buildLockedState(theme) : Column(
             children: [
-              // Formatting toolbar (collapsible)
               _buildToolbarCard(),
-
-              // Category selector (compact dropdown style)
               _buildCategorySelector(availableCategories, isEditable),
-
-              // Note content area (maximized space)
               Expanded(
                 child: Card(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -443,13 +496,13 @@ class NoteScreenState extends State<NoteScreen> {
                             decoration: const InputDecoration(
                               hintText: 'Title',
                               border: InputBorder.none,
-                              contentPadding: EdgeInsets.only(left: 16.0), // Applied left padding
+                              contentPadding: EdgeInsets.only(left: 16.0),
                             ),
                             style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
                             textCapitalization: TextCapitalization.sentences,
                           ),
                         ),
-                        const SizedBox(height: 12), // Increased padding
+                        const SizedBox(height: 12),
                         const Divider(height: 1),
                         const SizedBox(height: 12),
                         Expanded(
@@ -469,7 +522,6 @@ class NoteScreenState extends State<NoteScreen> {
                                     padding: EdgeInsets.only(left: 16.0),
                                   ),
                                 ),
-                                // Hint text overlay (no IgnorePointer)
                                 if (_isEmpty && !_hasFocus)
                                   Positioned.fill(
                                     child: Padding(
@@ -492,13 +544,20 @@ class NoteScreenState extends State<NoteScreen> {
                   ),
                 ),
               ),
-
-              // Created date (subtle footer)
               Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'Created: ${_formatDateTime(_createdAt)}',
-                  style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurface.withAlpha((0.6 * 255).round())),
+                padding: const EdgeInsets.only(top: 8.0, left: 4.0, right: 4.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Created: ${_formatDateTime(_createdAt)}',
+                      style: bottomTextStyle,
+                    ),
+                    Text(
+                      'Words: $wordCount',
+                      style: bottomTextStyle,
+                    ),
+                  ],
                 ),
               ),
             ],
