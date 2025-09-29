@@ -11,7 +11,6 @@ import 'providers/checklist_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/checklist_screen.dart';
 import 'package:notestack/theme/app_theme.dart';
-// import 'services/notification_service.dart'; // Removed NotificationService import
 import 'package:window_manager/window_manager.dart'; // For setting native window title
 
 void main() async {
