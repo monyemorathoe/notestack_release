@@ -298,7 +298,9 @@ class _ArchivesScreenState extends State<ArchivesScreen> {
           body: Builder(
             builder: (context) {
               Widget content;
-              if (archivedNotes.isEmpty) {
+              if (noteProvider.isLoading) {
+                content = const Center(child: CircularProgressIndicator());
+              } else if (archivedNotes.isEmpty) {
                 content = Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -386,6 +388,34 @@ class _ArchivesScreenState extends State<ArchivesScreen> {
                       right: 0,
                       child: _buildSelectionBottomSheet(context, noteProvider),
                     ),
+                  // Global bottom spinner for bulk actions: smooth persistent overlay using AnimatedSwitcher
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 250),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      child: _isPerformingBulkAction
+                          ? Container(
+                              key: const ValueKey('archivesBulkSpinner'),
+                              height: 80.0,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 8,
+                                    offset: Offset(0, -2),
+                                  ),
+                                ],
+                              ),
+                              child: const Center(child: CircularProgressIndicator()),
+                            )
+                          : const SizedBox.shrink(key: ValueKey('archivesBulkSpinnerEmpty')),
+                    ),
+                  ),
                 ],
               );
             },

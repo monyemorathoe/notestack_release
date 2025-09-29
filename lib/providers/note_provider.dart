@@ -10,6 +10,9 @@ class NoteProvider with ChangeNotifier {
   final List<String> _categories = ['All', 'Personal', 'Work', 'Ideas'];
   String? _selectedCategory = 'All';
 
+  // Loading state to indicate initial or refresh DB operations
+  bool _isLoading = true;
+
   // Selection state
   final Set<String> _selectedNoteIds = {};
   bool _isSelectionMode = false;
@@ -20,6 +23,7 @@ class NoteProvider with ChangeNotifier {
 
   List<String> get categories => _categories;
   String? get selectedCategory => _selectedCategory;
+  bool get isLoading => _isLoading;
 
   Set<String> get selectedNoteIds => _selectedNoteIds;
   bool get isSelectionMode => _isSelectionMode;
@@ -69,9 +73,18 @@ class NoteProvider with ChangeNotifier {
   }
 
   Future<void> loadNotes() async {
-    _allNotes = await DatabaseHelper.instance.getNotes();
-    _sortNotes(); // Ensure notes are sorted after loading
+    // Indicate loading started
+    _isLoading = true;
     notifyListeners();
+
+    try {
+      _allNotes = await DatabaseHelper.instance.getNotes();
+      _sortNotes(); // Ensure notes are sorted after loading
+    } finally {
+      // Indicate loading finished
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> addNote(String title, String contentJson, String category, {DateTime? createdAt, int? colorValue}) async {

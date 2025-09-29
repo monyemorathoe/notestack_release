@@ -423,12 +423,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   void _showDeleteSelectedNotesConfirmationDialog(
       BuildContext parentContext,
-      NoteProvider noteProvider) {
+      NoteProvider noteProvider,
+      VoidCallback onProcessStart,
+      VoidCallback onProcessEnd) {
     if (_isPerformingBulkAction) return;
     final selectedCount = noteProvider.selectedNoteIds.length;
 
     showDialog(
       context: parentContext,
+      barrierDismissible: false,
       builder: (BuildContext dialogContext) {
         bool isDeletingInDialog = false;
         return StatefulBuilder(
@@ -471,6 +474,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                               setDialogState(() {
                                 isDeletingInDialog = true;
                               });
+                              onProcessStart();
                               bool deleteSuccess = false;
                               try {
                                 deleteSuccess = await noteProvider.deleteSelectedNotes();
@@ -484,6 +488,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                                     content: 'Please unlock the selected notes before deleting.',
                                   );
                                 }
+                                onProcessEnd();
                               }
                             },
                             child: isDeletingInDialog
@@ -669,7 +674,15 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             'Delete',
             _isPerformingBulkAction
                 ? null
-                : () => _showDeleteSelectedNotesConfirmationDialog(context, noteProvider),
+                : () => _showDeleteSelectedNotesConfirmationDialog(context, noteProvider, () {
+              setState(() {
+                _isPerformingBulkAction = true;
+              });
+            }, () {
+              setState(() {
+                _isPerformingBulkAction = false;
+              });
+            }),
             isEnabled: !_isPerformingBulkAction,
           ),
           _buildBottomSheetAction(
@@ -1376,11 +1389,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   if (noteProvider.categories.isNotEmpty)
                     _buildCategoryChips(noteProvider, chipWidth, isSelectionMode),
                   Expanded(
-                    child: filteredNotes.isEmpty
+                    child: noteProvider.isLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : (filteredNotes.isEmpty
                         ? _buildEmptyState()
                         : _isGridView
                         ? _buildNotesGrid(filteredNotes, isSelectionMode, selectedCount)
-                        : _buildNotesList(filteredNotes, noteProvider),
+                        : _buildNotesList(filteredNotes, noteProvider)),
                   ),
                 ],
               ),
@@ -1396,6 +1411,27 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                     noteProvider,
                     showUnpinAction,
                     showUnlockAction,
+                  ),
+                ),
+              // Global bottom spinner for bulk actions: visible even if selection is cleared
+              if (_isPerformingBulkAction)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    height: 80.0,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 8,
+                          offset: Offset(0, -2),
+                        ),
+                      ],
+                    ),
+                    child: const Center(child: CircularProgressIndicator()),
                   ),
                 ),
             ],
