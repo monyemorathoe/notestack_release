@@ -88,13 +88,16 @@ class NoteScreenState extends State<NoteScreen> {
       _lastStyle.forEach((_, attr) {
         _quillController.formatSelection(attr);
       });
-      if (mounted) setState(() {});
-    } else {
-      if (mounted) {
-        setState(() {
-          _hasFocus = gainedFocus;
-        });
-      }
+      // No direct setState here for _isEmpty as it might be premature.
+      // _onQuillChanged will handle _isEmpty based on document content.
+    }
+    if (mounted) {
+      setState(() {
+        _hasFocus = gainedFocus;
+        // If focus is gained, the placeholder should hide, so ensure _isEmpty reflects that if needed.
+        // However, the primary trigger for placeholder is _hasFocus becoming true.
+        // And _isEmpty should reflect the actual document state.
+      });
     }
   }
 
@@ -145,6 +148,8 @@ class NoteScreenState extends State<NoteScreen> {
     final title = _titleController.text.trim();
     final contentJson = jsonEncode(_quillController.document.toDelta().toJson());
 
+    // Using document.isEmpty() for save condition, assuming it is sufficient.
+    // If a more complex check (like _isDocumentEffectivelyEmpty) was needed, it should be used here.
     if (title.isEmpty && _quillController.document.isEmpty() && widget.note == null) return;
 
     final noteProvider = Provider.of<NoteProvider>(context, listen: false);
@@ -520,15 +525,14 @@ class NoteScreenState extends State<NoteScreen> {
                                   controller: _quillController,
                                   focusNode: _quillFocusNode,
                                   config: const QuillEditorConfig(
-                                    padding: EdgeInsets.only(left: 16.0),
+                                    padding: EdgeInsets.only(left: 16.0), // Editor's own content padding
                                   ),
                                 ),
                                 if (_isEmpty && !_hasFocus)
                                   Positioned.fill(
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(left: 16),
+                                    child: Center( // Center the placeholder text
                                       child: Text(
-                                        'Start writing your note...',
+                                        'click to start typing', // New placeholder text
                                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                                           color: Theme.of(context).hintColor.withAlpha((0.7 * 255).round()),
                                           fontStyle: FontStyle.italic,
