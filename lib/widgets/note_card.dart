@@ -131,7 +131,7 @@ class _NoteCardState extends State<NoteCard> {
         trailingWidget = Row(mainAxisSize: MainAxisSize.min, children: statusIcons);
       }
     }
-    
+
     final plainTextContent = _getPlainTextFromDelta(widget.note.content);
 
     if (widget.isGridView) {
@@ -144,9 +144,9 @@ class _NoteCardState extends State<NoteCard> {
           clipBehavior: Clip.antiAlias, // Ensures InkWell splash is contained
           shape: isSelected
               ? RoundedRectangleBorder(
-                  side: BorderSide(color: theme.colorScheme.primary, width: 2),
-                  borderRadius: BorderRadius.circular(12),
-                )
+            side: BorderSide(color: theme.colorScheme.primary, width: 2),
+            borderRadius: BorderRadius.circular(12),
+          )
               : (theme.cardTheme.shape ?? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
           child: InkWell(
             borderRadius: (theme.cardTheme.shape is RoundedRectangleBorder
@@ -208,27 +208,27 @@ class _NoteCardState extends State<NoteCard> {
                       Expanded(
                         child: widget.note.isLocked
                             ? Center(
-                                child: Text(
-                                  'Unlock to view content',
-                                  style: TextStyle(fontStyle: FontStyle.italic, color: cSubtitletext),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                ),
-                              )
+                          child: Text(
+                            'Unlock to view content',
+                            style: TextStyle(fontStyle: FontStyle.italic, color: cSubtitletext),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                          ),
+                        )
                             : Text(
-                                plainTextContent,
-                                style: TextStyle(color: cSubtitletext, fontSize: 14),
-                                maxLines: 3,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                          plainTextContent,
+                          style: TextStyle(color: cSubtitletext, fontSize: 14),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       // Date at bottom
                       Align(
                         alignment: Alignment.bottomLeft,
                         child: Text(
                           'Created: ${DateFormat.yMMMd().format(widget.note.createdAt)}',
-                          style: TextStyle(color: cDatetext, fontSize: 12),
+                          style: TextStyle(color: cDatetext, fontSize: 12, fontWeight: FontWeight.w500), // MODIFIED
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -245,12 +245,12 @@ class _NoteCardState extends State<NoteCard> {
       // ListTile layout for normal (non-grid) view
       ShapeBorder cardShape = isSelected
           ? RoundedRectangleBorder(
-              side: BorderSide(color: theme.colorScheme.primary, width: 2),
-              borderRadius: BorderRadius.circular(12),
-            )
+        side: BorderSide(color: theme.colorScheme.primary, width: 2),
+        borderRadius: BorderRadius.circular(12),
+      )
           : (hasCustomNoteColor
-              ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
-              : theme.cardTheme.shape ?? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)));
+          ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+          : theme.cardTheme.shape ?? RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)));
 
       BorderRadius inkWellBorderRadius = BorderRadius.circular(12); // Default for InkWell
       if (cardShape is RoundedRectangleBorder) {
@@ -297,21 +297,21 @@ class _NoteCardState extends State<NoteCard> {
                       const SizedBox(height: 4),
                       widget.note.isLocked
                           ? Text(
-                              'Unlock to view content',
-                              style: TextStyle(fontStyle: FontStyle.italic, color: cSubtitletext),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            )
+                        'Unlock to view content',
+                        style: TextStyle(fontStyle: FontStyle.italic, color: cSubtitletext),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      )
                           : Text(
-                              plainTextContent,
-                              style: TextStyle(color: cSubtitletext),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                        plainTextContent,
+                        style: TextStyle(color: cSubtitletext),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                       const SizedBox(height: 4),
                       Text(
                         'Created: ${DateFormat.yMMMd().format(widget.note.createdAt)}',
-                        style: TextStyle(color: cDatetext, fontSize: theme.textTheme.bodySmall?.fontSize),
+                        style: TextStyle(color: cDatetext, fontSize: theme.textTheme.bodySmall?.fontSize, fontWeight: FontWeight.w500), // MODIFIED
                       ),
                     ],
                   ),

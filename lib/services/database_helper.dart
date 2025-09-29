@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert'; // Added for jsonDecode
+import 'dart:io'; // <<< ADD THIS IMPORT
 import 'package:flutter_quill/flutter_quill.dart'; // Added for Document
 import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart'; // <<< ADD THIS IMPORT
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // <<< ADD THIS IMPORT
+// <<< HIDE the old getDatabasesPath
 import '../models/note.dart';
 
 class DatabaseHelper {
@@ -10,7 +13,10 @@ class DatabaseHelper {
   static Database? _database;
 
   static const String _databaseName = "notes.db";
-  static final int _databaseVersion = 3; // <<< VERSION IS NOW 3
+  static final int _databaseVersion = 3;
+
+  // Define a subfolder name for your app's data to keep things organized
+  static const String _appNameForPath = "NoteStack";
 
   DatabaseHelper._init();
 
@@ -21,12 +27,30 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    String path = join(await getDatabasesPath(), _databaseName);
-    return await openDatabase(
-      path,
-      version: _databaseVersion,
-      onCreate: _createDB,
-      onUpgrade: _onUpgrade,
+    // Ensure FFI is initialized (typically done once in main.dart for desktop)
+    // sqfliteFfiInit(); 
+
+    Directory appSupportDir = await getApplicationSupportDirectory();
+    String dbPath = join(appSupportDir.path, _appNameForPath, _databaseName);
+
+    // For sqflite_common_ffi, the directory is created automatically if it doesn't exist
+    // during openDatabase. Explicit creation can be done if needed for other reasons
+    // or if issues arise, but often isn't necessary for the database file itself.
+    // Example of explicit directory creation if you wanted it:
+    // final dbDir = Directory(join(appSupportDir.path, _appNameForPath));
+    // if (!await dbDir.exists()) {
+    //   await dbDir.create(recursive: true);
+    // }
+
+    var dbFactory = databaseFactoryFfi; // Use FFI factory for desktop
+
+    return await dbFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions(
+        version: _databaseVersion,
+        onCreate: _createDB,
+        onUpgrade: _onUpgrade,
+      ),
     );
   }
 
@@ -64,8 +88,6 @@ class DatabaseHelper {
     if (oldVersion < 3) {
       try {
         await db.execute("ALTER TABLE notes ADD COLUMN plainTextContent TEXT NOT NULL DEFAULT '';");
-        // print("Column plainTextContent added.");
-
         List<Map<String, dynamic>> existingNotes = await db.query('notes');
         for (var noteMap in existingNotes) {
           String id = noteMap['id'];
@@ -78,11 +100,7 @@ class DatabaseHelper {
               plainText = doc.toPlainText().trim();
             }
           } catch (e) {
-            // If content is not valid JSON delta, it might be old plain text.
-            // Or it might be an error. For simplicity, we'll use the raw content if it's not JSON.
-            // A more robust solution might try to differentiate or log this.
-            plainText = jsonContent.trim(); 
-            // print("Error decoding JSON for note $id, using raw content for plainText: $e");
+            plainText = jsonContent.trim();
           }
           await db.update(
             'notes',
@@ -91,7 +109,6 @@ class DatabaseHelper {
             whereArgs: [id],
           );
         }
-        // print("Populated plainTextContent for existing notes.");
       } catch (e) {
         // print("Failed to add plainTextContent column or populate it: $e");
       }
@@ -124,7 +141,7 @@ class DatabaseHelper {
     final db = await database;
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
-      orderBy: 'modifiedAt DESC, createdAt DESC', // Sort by modified, then created
+      orderBy: 'modifiedAt DESC, createdAt DESC',
     );
     if (maps.isEmpty) {
       return [];
@@ -141,7 +158,6 @@ class DatabaseHelper {
     }
     final List<Map<String, dynamic>> maps = await db.query(
       'notes',
-      // Search in title and the new plainTextContent column
       where: '(title LIKE ? OR plainTextContent LIKE ?) AND isArchived = 0',
       whereArgs: ['%$query%', '%$query%'],
       orderBy: 'modifiedAt DESC',

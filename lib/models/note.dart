@@ -46,7 +46,6 @@ class Note {
       id: map['id'],
       title: map['title'],
       content: map['content'],
-      // Ensure plainTextContent is handled, even if it might be null from older db versions initially
       plainTextContent: map['plainTextContent'] as String? ?? '',
       category: map['category'],
       createdAt: DateTime.parse(map['createdAt']),
@@ -55,6 +54,35 @@ class Note {
       isPinned: map['isPinned'] == 1,
       isLocked: (map['isLocked'] as int? ?? 0) == 1,
       colorValue: map['colorValue'] as int?,
+    );
+  }
+
+  Note copyWith({
+    String? id,
+    String? title,
+    String? content,
+    String? plainTextContent,
+    String? category,
+    DateTime? createdAt,
+    DateTime? modifiedAt,
+    bool? isArchived,
+    bool? isPinned,
+    bool? isLocked,
+    int? colorValue,
+    bool clearColorValue = false, // Added to explicitly set colorValue to null
+  }) {
+    return Note(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      plainTextContent: plainTextContent ?? this.plainTextContent,
+      category: category ?? this.category,
+      createdAt: createdAt ?? this.createdAt,
+      modifiedAt: modifiedAt ?? this.modifiedAt,
+      isArchived: isArchived ?? this.isArchived,
+      isPinned: isPinned ?? this.isPinned,
+      isLocked: isLocked ?? this.isLocked,
+      colorValue: clearColorValue ? null : (colorValue ?? this.colorValue),
     );
   }
 }

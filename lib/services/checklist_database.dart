@@ -1,4 +1,7 @@
-import 'package:sqflite/sqflite.dart';
+import 'dart:io'; // <<< ADD THIS IMPORT
+import 'package:path_provider/path_provider.dart'; // <<< ADD THIS IMPORT
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'; // <<< ADD THIS IMPORT
+// <<< MODIFIED IMPORT
 import 'package:path/path.dart';
 import '../models/checklist_item.dart';
 
@@ -6,6 +9,10 @@ class ChecklistDatabase {
   static Database? _db;
   static const int _databaseVersion = 2;
   static const String _tableName = 'checklist_items';
+  static const String _databaseName = 'checklist.db'; // <<< ADDED DB NAME
+
+  // Define a subfolder name for your app's data to keep things organized
+  static const String _appNameForPath = "NoteStack"; // <<< ADDED APP NAME FOR PATH
 
   static Future<Database> get database async {
     if (_db != null) return _db!;
@@ -14,12 +21,24 @@ class ChecklistDatabase {
   }
 
   static Future<Database> _initDb() async {
-    final dbPath = await getDatabasesPath();
-    return openDatabase(
-      join(dbPath, 'checklist.db'),
-      version: _databaseVersion,
-      onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
+    // Ensure FFI is initialized (typically done once in main.dart for desktop)
+    // sqfliteFfiInit();
+
+    Directory appSupportDir = await getApplicationSupportDirectory();
+    String dbPath = join(appSupportDir.path, _appNameForPath, _databaseName);
+
+    // For sqflite_common_ffi, the directory is created automatically if it doesn't exist
+    // during openDatabase.
+
+    var dbFactory = databaseFactoryFfi; // Use FFI factory for desktop
+
+    return await dbFactory.openDatabase(
+      dbPath,
+      options: OpenDatabaseOptions( // <<< Use OpenDatabaseOptions for FFI
+        version: _databaseVersion,
+        onCreate: _onCreate,
+        onUpgrade: _onUpgrade,
+      ),
     );
   }
 
@@ -35,8 +54,6 @@ class ChecklistDatabase {
 
   static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Migration path for removing scheduledDateTime and reminderEnabled
-      // Create a temporary table with the new schema
       await db.execute('''
         CREATE TABLE ${_tableName}_temp (
           id INTEGER PRIMARY KEY,
@@ -44,12 +61,8 @@ class ChecklistDatabase {
           isDone INTEGER
         )
       ''');
-
-      // Copy data from the old table to the temporary table
-      // Make sure to only select columns that exist in the old table and are needed in the new one.
-      // This assumes the old table (version 1) had id, title, isDone, scheduledDateTime, reminderEnabled
       try {
-        final oldData = await db.query(_tableName); // Query old table
+        final oldData = await db.query(_tableName);
         for (var row in oldData) {
           await db.insert('${_tableName}_temp', {
             'id': row['id'],
@@ -57,18 +70,12 @@ class ChecklistDatabase {
             'isDone': row['isDone'],
           });
         }
-        // Drop the old table
         await db.execute('DROP TABLE $_tableName');
-        // Rename the temporary table to the original table name
         await db.execute('ALTER TABLE ${_tableName}_temp RENAME TO $_tableName');
-
       } catch (e) {
-        // If the old table didn't exist or an error occurs, 
-        // it might be a fresh install or a different state.
-        // Fallback to just creating the new table if it doesn't exist.
-        await db.execute('DROP TABLE IF EXISTS ${_tableName}_temp'); // clean up temp if it exists
-        await db.execute('DROP TABLE IF EXISTS $_tableName'); // drop original if exists
-        await _onCreate(db, newVersion); // create with new schema
+        await db.execute('DROP TABLE IF EXISTS ${_tableName}_temp');
+        await db.execute('DROP TABLE IF EXISTS $_tableName');
+        await _onCreate(db, newVersion);
       }
     }
   }

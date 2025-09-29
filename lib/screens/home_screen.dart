@@ -1,5 +1,5 @@
-import 'dart:async'; // Added for Timer
-import 'dart:io'; // Added for Platform check
+import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
@@ -31,13 +31,13 @@ Future<void> _showLockedNotesInfoDialog(BuildContext context, {String? title, St
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  title ?? 'Cannot Perform Action on Locked Note', // Generic title
+                  title ?? 'Cannot Perform Action on Locked Note',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  content ?? 'Please unlock this note before performing this action.', // Generic content
+                  content ?? 'Please unlock this note before performing this action.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.grey),
                 ),
@@ -76,9 +76,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   bool _isGridView = false;
   static const String _kPrefIsGridView = 'isGridView';
   bool _swipeToDeleteNotesEnabled = false;
-  bool _swipeToArchiveNotesEnabled = false; // Added for swipe to archive
+  bool _swipeToArchiveNotesEnabled = false;
   static const String _kSwipeToDeleteNotes = 'swipeToDeleteNotes';
-  static const String _kSwipeToArchiveNotes = 'swipeToArchiveNotes'; // Added for swipe to archive
+  static const String _kSwipeToArchiveNotes = 'swipeToArchiveNotes';
 
   // State for inline unlock
   bool _isShowingInlineUnlock = false;
@@ -89,7 +89,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   Timer? _hintErrorTimer;
   static const String _defaultHintText = 'Enter password';
 
-  // Predefined Material colors for the picker (same as NoteScreen)
+  // State for bulk action loading
+  bool _isPerformingBulkAction = false;
+
+  // Predefined Material colors for the picker
   final List<Color> _defaultColors = [
     Colors.red[200]!,
     Colors.orange[200]!,
@@ -112,8 +115,12 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _loadViewPreference();
-    _loadSwipePreferences(); // Load all swipe preferences
+    _initializePreferences();
+  }
+
+  Future<void> _initializePreferences() async {
+    await _loadViewPreference();
+    await _loadSwipePreferences();
   }
 
   Future<void> _loadViewPreference() async {
@@ -126,17 +133,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         });
       }
     } catch (e) {
-      // ignore errors
+      // Ignore errors
     }
   }
 
   Future<void> _loadSwipePreferences() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (mounted) {
-      setState(() {
-        _swipeToDeleteNotesEnabled = prefs.getBool(_kSwipeToDeleteNotes) ?? false;
-        _swipeToArchiveNotesEnabled = prefs.getBool(_kSwipeToArchiveNotes) ?? false;
-      });
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          _swipeToDeleteNotesEnabled = prefs.getBool(_kSwipeToDeleteNotes) ?? false;
+          _swipeToArchiveNotesEnabled = prefs.getBool(_kSwipeToArchiveNotes) ?? false;
+        });
+      }
+    } catch (e) {
+      // Ignore errors
     }
   }
 
@@ -145,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_kPrefIsGridView, isGrid);
     } catch (e) {
-      // ignore errors
+      // Ignore errors
     }
   }
 
@@ -155,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       if (callSetState && mounted) {
         setState(() {
           _inlinePasswordHintText = _defaultHintText;
-          _inlinePasswordHintStyle = null; // Will fallback to theme default
+          _inlinePasswordHintStyle = null;
         });
       } else {
         _inlinePasswordHintText = _defaultHintText;
@@ -171,11 +182,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _hintErrorTimer?.cancel();
     super.dispose();
   }
-  
+
   Future<void> _handleSubmittedPasswordForUnlock(NoteProvider noteProvider) async {
-    final theme = Theme.of(context);
+    // Capture context and theme before async operations
+    final currentContext = context;
+    final theme = Theme.of(currentContext);
     final password = _inlinePasswordController.text;
-    _hintErrorTimer?.cancel(); // Cancel any existing timer
+
+    _hintErrorTimer?.cancel();
 
     if (password.isEmpty) {
       if (mounted) {
@@ -184,40 +198,80 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           _inlinePasswordHintStyle = TextStyle(color: theme.colorScheme.error);
         });
         _hintErrorTimer = Timer(const Duration(seconds: 3), () {
-          _resetInlinePasswordHint();
+          if (mounted) {
+            _resetInlinePasswordHint();
+          }
         });
       }
       return;
     }
+
     final bool passwordVerified = await _secureStorageService.verifyPassword(password);
+
     if (!mounted) return;
 
     if (passwordVerified) {
-      _resetInlinePasswordHint(callSetState: false); // Reset hint without immediate set state
-      noteProvider.unlockSelectedNotes();
-      _inlinePasswordController.clear();
-      setState(() {
-        _isShowingInlineUnlock = false;
-        _obscureInlinePassword = true;
-      });
-      noteProvider.clearSelection();
+      _resetInlinePasswordHint(callSetState: false);
+      if (mounted) {
+        setState(() {
+          _isPerformingBulkAction = true;
+        });
+      }
+
+      try {
+        await noteProvider.unlockSelectedNotes();
+        _inlinePasswordController.clear();
+
+        if (mounted) {
+          setState(() {
+            _isShowingInlineUnlock = false;
+            _obscureInlinePassword = true;
+          });
+        }
+
+        // Use the stored context for provider operations
+        if (currentContext.mounted) {
+          final provider = Provider.of<NoteProvider>(currentContext, listen: false);
+          provider.clearSelection();
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isPerformingBulkAction = false;
+          });
+        }
+      }
     } else {
-      _inlinePasswordController.clear(); // Clear field on wrong password
-      setState(() {
-        _inlinePasswordHintText = 'Wrong password';
-        _inlinePasswordHintStyle = TextStyle(color: theme.colorScheme.error);
-      });
-      _hintErrorTimer = Timer(const Duration(seconds: 3), () {
-        _resetInlinePasswordHint();
-      });
+      _inlinePasswordController.clear();
+      if (mounted) {
+        setState(() {
+          _inlinePasswordHintText = 'Wrong password';
+          _inlinePasswordHintStyle = TextStyle(color: theme.colorScheme.error);
+        });
+        _hintErrorTimer = Timer(const Duration(seconds: 3), () {
+          if (mounted) {
+            _resetInlinePasswordHint();
+          }
+        });
+      }
     }
   }
 
   Widget _buildBottomSheetAction(
-      BuildContext context, IconData icon, String label, VoidCallback? onPressed, {bool isEnabled = true, Color? iconColorOverride}) {
+      BuildContext context,
+      IconData icon,
+      String label,
+      VoidCallback? onPressed,
+      {bool isEnabled = true,
+        Color? iconColorOverride}
+      ) {
     final theme = Theme.of(context);
-    final Color iconColor = isEnabled ? (iconColorOverride ?? theme.iconTheme.color ?? theme.colorScheme.onSurface) : theme.disabledColor;
-    final Color labelColor = isEnabled ? (theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface) : theme.disabledColor;
+    final Color iconColor = isEnabled
+        ? (iconColorOverride ?? theme.iconTheme.color ?? theme.colorScheme.onSurface)
+        : theme.disabledColor;
+    final Color labelColor = isEnabled
+        ? (theme.textTheme.bodySmall?.color ?? theme.colorScheme.onSurface)
+        : theme.disabledColor;
 
     return Expanded(
       child: InkWell(
@@ -242,9 +296,11 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _showColorPickerForSelectedNotes(BuildContext context, NoteProvider noteProvider) async {
+    if (_isPerformingBulkAction) return;
+
     int? currentCommonColorValue;
     bool multipleColors = false;
-    bool canClearColor = false; 
+    bool canClearColor = false;
 
     if (noteProvider.selectedNoteIds.isNotEmpty) {
       final firstNoteId = noteProvider.selectedNoteIds.first;
@@ -252,28 +308,28 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final firstNote = noteProvider.allNotes.firstWhere((n) => n.id == firstNoteId);
         currentCommonColorValue = firstNote.colorValue;
         if (firstNote.colorValue != null) {
-          canClearColor = true; 
+          canClearColor = true;
         }
 
         for (String noteId in noteProvider.selectedNoteIds) {
           final note = noteProvider.allNotes.firstWhere((n) => n.id == noteId);
           if (note.colorValue != currentCommonColorValue) {
             multipleColors = true;
-            currentCommonColorValue = null; 
+            currentCommonColorValue = null;
           }
           if (note.colorValue != null) {
-            canClearColor = true; 
+            canClearColor = true;
           }
-          if (multipleColors && canClearColor) break; 
+          if (multipleColors && canClearColor) break;
         }
       } catch (e) {
         currentCommonColorValue = null;
       }
     }
 
-    int? initialDialogValue = currentCommonColorValue;
+    final int? initialDialogValue = currentCommonColorValue;
 
-    List<Widget> actionButtons = [
+    final List<Widget> actionButtons = [
       TextButton(
         onPressed: () => Navigator.of(context).pop(initialDialogValue),
         child: const Text('Cancel'),
@@ -283,13 +339,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (canClearColor) {
       actionButtons.add(
         TextButton(
-          onPressed: () => Navigator.of(context).pop(null), // Clear color
+          onPressed: () => Navigator.of(context).pop(null),
           child: const Text('Clear Color'),
         ),
       );
     }
 
-    int? newColorValue = await showDialog<int>(
+    final int? newColorValue = await showDialog<int>(
       context: context,
       builder: (BuildContext dialogContext) {
         return Dialog(
@@ -316,20 +372,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       children: _defaultColors.map((color) {
                         return InkWell(
                           onTap: () => Navigator.of(dialogContext).pop(color.toARGB32()),
-                          borderRadius: BorderRadius.circular(20), // For ink splash
+                          borderRadius: BorderRadius.circular(20),
                           child: Container(
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
-                                color: color,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: !multipleColors && currentCommonColorValue == color.toARGB32()
-                                      ? Theme.of(dialogContext).colorScheme.onSurface
-                                      : Colors.transparent,
-                                  width: 2,
-                                )),
-                        )); // closes InkWell
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: !multipleColors && currentCommonColorValue == color.toARGB32()
+                                    ? Theme.of(dialogContext).colorScheme.onSurface
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        );
                       }).toList(),
                     ),
                   ),
@@ -342,77 +400,111 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-        ); // closes Dialog
-      }, // closes builder
-    ); // closes showDialog
+        );
+      },
+    );
 
     if (newColorValue != initialDialogValue) {
-      await noteProvider.setColorForSelectedNotes(newColorValue);
+      if (!mounted) return;
+      setState(() {
+        _isPerformingBulkAction = true;
+      });
+      try {
+        await noteProvider.setColorForSelectedNotes(newColorValue);
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isPerformingBulkAction = false;
+          });
+        }
+      }
     }
   }
 
   void _showDeleteSelectedNotesConfirmationDialog(
       BuildContext parentContext,
       NoteProvider noteProvider) {
+    if (_isPerformingBulkAction) return;
     final selectedCount = noteProvider.selectedNoteIds.length;
 
     showDialog(
       context: parentContext,
       builder: (BuildContext dialogContext) {
-        return Dialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          child: Container(
-            width: MediaQuery.of(parentContext).size.width * 0.85,
-            padding: const EdgeInsets.all(24),
-            child: ZoomIn(
-              duration: const Duration(milliseconds: 250),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    selectedCount > 1 ? 'Delete $selectedCount Notes?' : 'Delete Note?',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Are you sure you want to delete ${selectedCount > 1 ? "these $selectedCount notes" : "this note"}? This action cannot be undone.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.grey),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: <Widget>[
-                      TextButton(
-                        child: const Text('Cancel'),
-                        onPressed: () {
-                          Navigator.of(dialogContext).pop();
-                        },
+        bool isDeletingInDialog = false;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                width: MediaQuery.of(parentContext).size.width * 0.85,
+                padding: const EdgeInsets.all(24),
+                child: ZoomIn(
+                  duration: const Duration(milliseconds: 250),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        selectedCount > 1 ? 'Delete $selectedCount Notes?' : 'Delete Note?',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(width: 8),
-                      FilledButton(
-                        style: FilledButton.styleFrom(backgroundColor: Colors.red),
-                        child: const Text('Delete'),
-                        onPressed: () async {
-                          bool deleteSuccess = await noteProvider.deleteSelectedNotes();
-                          if (dialogContext.mounted) {
-                            Navigator.of(dialogContext).pop();
-                          }
-                          if (!deleteSuccess && parentContext.mounted) {
-                            _showLockedNotesInfoDialog(parentContext, 
-                              title: 'Cannot Delete Locked Notes',
-                              content: 'Please unlock the selected notes before deleting.'
-                            );
-                          }
-                        },
+                      const SizedBox(height: 16),
+                      Text(
+                        'Are you sure you want to delete ${selectedCount > 1 ? "these $selectedCount notes" : "this note"}? This action cannot be undone.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 24),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: <Widget>[
+                          TextButton(
+                            onPressed: isDeletingInDialog ? null : () {
+                              Navigator.of(dialogContext).pop();
+                            },
+                            child: const Text('Cancel'),
+                          ),
+                          const SizedBox(width: 8),
+                          FilledButton(
+                            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                            onPressed: isDeletingInDialog ? null : () async {
+                              setDialogState(() {
+                                isDeletingInDialog = true;
+                              });
+                              bool deleteSuccess = false;
+                              try {
+                                deleteSuccess = await noteProvider.deleteSelectedNotes();
+                              } finally {
+                                if (dialogContext.mounted) {
+                                  Navigator.of(dialogContext).pop();
+                                }
+                                if (!deleteSuccess && parentContext.mounted) {
+                                  _showLockedNotesInfoDialog(parentContext,
+                                    title: 'Cannot Delete Locked Notes',
+                                    content: 'Please unlock the selected notes before deleting.',
+                                  );
+                                }
+                              }
+                            },
+                            child: isDeletingInDialog
+                                ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                                : const Text('Delete'),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -423,7 +515,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _inlinePasswordHintStyle ??= theme.inputDecorationTheme.hintStyle ?? TextStyle(color: theme.hintColor);
 
     return Container(
-      height: 80.0, 
+      height: 80.0,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHighest,
@@ -435,7 +527,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
-      child: Row(
+      child: _isPerformingBulkAction
+          ? const Center(child: CircularProgressIndicator())
+          : Row(
         children: [
           Expanded(
             child: Material(
@@ -447,7 +541,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   inputDecorationTheme: InputDecorationTheme(
                     filled: true,
                     fillColor: Theme.of(context).brightness == Brightness.dark
-                        ? const Color(0xFF323232) // Consistent dark color for dark mode
+                        ? const Color(0xFF323232)
                         : theme.colorScheme.surface,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -495,10 +589,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               _inlinePasswordController.clear();
               _resetInlinePasswordHint();
               if (mounted) {
-                 setState(() {
-                    _isShowingInlineUnlock = false;
-                    _obscureInlinePassword = true;
-                 });
+                setState(() {
+                  _isShowingInlineUnlock = false;
+                  _obscureInlinePassword = true;
+                });
               }
             },
           ),
@@ -547,7 +641,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           ),
         ],
       ),
-      child: Row(
+      child: _isPerformingBulkAction
+          ? const Center(child: CircularProgressIndicator())
+          : Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -555,118 +651,651 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             context,
             Icons.palette_outlined,
             'Color',
-            isAnyNoteLocked 
-              ? null 
-              : () => _showColorPickerForSelectedNotes(context, noteProvider),
-            isEnabled: !isAnyNoteLocked,
+            isAnyNoteLocked || _isPerformingBulkAction
+                ? null
+                : () => _showColorPickerForSelectedNotes(context, noteProvider),
+            isEnabled: !isAnyNoteLocked && !_isPerformingBulkAction,
           ),
           _buildBottomSheetAction(
             context,
             Icons.archive_outlined,
             'Archive',
-            () => noteProvider.archiveSelectedNotes(),
+            _isPerformingBulkAction ? null : () => _handleArchiveSelectedNotes(noteProvider),
+            isEnabled: !_isPerformingBulkAction,
           ),
           _buildBottomSheetAction(
             context,
             Icons.delete_outline,
             'Delete',
-            () => _showDeleteSelectedNotesConfirmationDialog(context, noteProvider),
+            _isPerformingBulkAction
+                ? null
+                : () => _showDeleteSelectedNotesConfirmationDialog(context, noteProvider),
+            isEnabled: !_isPerformingBulkAction,
           ),
           _buildBottomSheetAction(
             context,
             showUnlockAction ? Icons.lock_open : Icons.lock_outline,
             showUnlockAction ? 'Unlock' : 'Lock',
-            () async {
-              _resetInlinePasswordHint(); 
-              if (showUnlockAction) {
-                final bool isPasswordGloballySet = await _secureStorageService.isPasswordSet();
-                if (!mounted) return;
-                if (isPasswordGloballySet) {
-                  setState(() {
-                    _isShowingInlineUnlock = true;
-                    _obscureInlinePassword = true;
-                  });
-                } else {
-                  noteProvider.unlockSelectedNotes();
-                }
-              } else {
-                final bool isPasswordGloballySet = await _secureStorageService.isPasswordSet();
-                if (!mounted) return;
-                if (!isPasswordGloballySet) {
-                  showDialog(
-                    context: context,
-                    builder: (BuildContext dialogContext) {
-                      return Dialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        child: Container(
-                          width: MediaQuery.of(context).size.width * 0.85,
-                          padding: const EdgeInsets.all(24),
-                          child: ZoomIn(
-                            duration: const Duration(milliseconds: 250),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Text('Set Password to Lock Notes',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'To use the lock feature, you first need to set an application password',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                const SizedBox(height: 24),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    TextButton(
-                                      child: const Text('Cancel'),
-                                      onPressed: () {
-                                        Navigator.of(dialogContext).pop();
-                                      },
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton(
-                                      onPressed: () {
-                                        Navigator.of(dialogContext).pop();
-                                        if (!mounted) return;
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                                        );
-                                      },
-                                      child: const Text('Set Password'),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                } else {
-                  noteProvider.lockSelectedNotes();
-                }
-              }
-            },
+            _isPerformingBulkAction ? null : () => _handleLockUnlockAction(
+              noteProvider,
+              showUnlockAction,
+            ),
+            isEnabled: !_isPerformingBulkAction,
           ),
           _buildBottomSheetAction(
             context,
             showUnpinAction ? Icons.push_pin : Icons.push_pin_outlined,
             showUnpinAction ? 'Unpin' : 'Pin',
-            () {
-              if (showUnpinAction) {
-                noteProvider.unpinSelectedNotes();
-              } else {
-                noteProvider.pinSelectedNotes();
-              }
-            },
+            _isPerformingBulkAction ? null : () => _handlePinUnpinAction(
+              noteProvider,
+              showUnpinAction,
+            ),
+            isEnabled: !_isPerformingBulkAction,
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _handleArchiveSelectedNotes(NoteProvider noteProvider) async {
+    if (!mounted) return;
+    setState(() {
+      _isPerformingBulkAction = true;
+    });
+    try {
+      await noteProvider.archiveSelectedNotes();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPerformingBulkAction = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleLockUnlockAction(NoteProvider noteProvider, bool showUnlockAction) async {
+    _resetInlinePasswordHint();
+
+    if (showUnlockAction) {
+      final bool isPasswordGloballySet = await _secureStorageService.isPasswordSet();
+      if (!mounted) return;
+
+      if (isPasswordGloballySet) {
+        setState(() {
+          _isShowingInlineUnlock = true;
+          _obscureInlinePassword = true;
+        });
+      } else {
+        await _performBulkAction(() => noteProvider.unlockSelectedNotes());
+      }
+    } else {
+      final bool isPasswordGloballySet = await _secureStorageService.isPasswordSet();
+      if (!mounted) return;
+
+      if (!isPasswordGloballySet) {
+        _showSetPasswordDialog();
+      } else {
+        await _performBulkAction(() => noteProvider.lockSelectedNotes());
+      }
+    }
+  }
+
+  Future<void> _handlePinUnpinAction(NoteProvider noteProvider, bool showUnpinAction) async {
+    if (!mounted) return;
+    await _performBulkAction(() {
+      return showUnpinAction
+          ? noteProvider.unpinSelectedNotes()
+          : noteProvider.pinSelectedNotes();
+    });
+  }
+
+  Future<void> _performBulkAction(Future<void> Function() action) async {
+    if (!mounted) return;
+    setState(() {
+      _isPerformingBulkAction = true;
+    });
+    try {
+      await action();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPerformingBulkAction = false;
+        });
+      }
+    }
+  }
+
+  void _showSetPasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.85,
+            padding: const EdgeInsets.all(24),
+            child: ZoomIn(
+              duration: const Duration(milliseconds: 250),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Set Password to Lock Notes',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'To use the lock feature, you first need to set an application password',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        child: const Text('Cancel'),
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: () {
+                          Navigator.of(dialogContext).pop();
+                          if (!mounted) return;
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                          );
+                        },
+                        child: const Text('Set Password'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  List<Widget> _buildNormalModeActions() {
+    final actions = [
+      IconButton(
+        icon: const Icon(Icons.search),
+        tooltip: 'Search',
+        onPressed: () {
+          showSearch(
+            context: context,
+            delegate: NotesSearchDelegate(isGridView: _isGridView),
+          );
+        },
+      ),
+      PopupMenuButton<String>(
+        icon: const Icon(Icons.more_vert),
+        splashRadius: 20.0,
+        offset: const Offset(0, 40),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+        elevation: 4,
+        onSelected: (String result) async {
+          switch (result) {
+            case 'checklist':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ChecklistScreen()),
+              );
+            case 'archived':
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ArchivesScreen()),
+              );
+            case 'settings':
+              await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+              await _loadSwipePreferences();
+              await _loadViewPreference();
+          }
+        },
+        itemBuilder: (BuildContext context) => const <PopupMenuEntry<String>>[
+          PopupMenuItem<String>(
+            value: 'checklist',
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.checklist_rtl_outlined),
+                SizedBox(width: 12),
+                Text('Checklist', style: TextStyle(fontSize: 16.0)),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: 'archived',
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.archive_outlined),
+                SizedBox(width: 12),
+                Text('Archived', style: TextStyle(fontSize: 16.0)),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: 'settings',
+            child: Row(
+              children: <Widget>[
+                Icon(Icons.settings_outlined),
+                SizedBox(width: 12),
+                Text('Settings', style: TextStyle(fontSize: 16.0)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    ];
+
+    if (Platform.isWindows) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(right: 10.0),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: actions,
+          ),
+        ),
+      ];
+    }
+
+    return actions;
+  }
+
+  List<Widget> _buildSelectionModeActions(NoteProvider noteProvider) {
+    final actions = [
+      IconButton(
+        icon: const Icon(Icons.share),
+        tooltip: 'Share',
+        onPressed: () => _handleShareSelectedNotes(noteProvider),
+      ),
+    ];
+
+    if (Platform.isWindows) {
+      return [
+        Padding(
+          padding: const EdgeInsets.only(right: 10.0),
+          child: actions.first,
+        ),
+      ];
+    }
+
+    return actions;
+  }
+
+  Future<void> _handleShareSelectedNotes(NoteProvider noteProvider) async {
+    if (noteProvider.selectedNoteIds.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No notes selected to share.')),
+        );
+      }
+      return;
+    }
+
+    final List<Note> selectedNotes = [];
+    int lockedCount = 0;
+
+    for (String id in noteProvider.selectedNoteIds) {
+      try {
+        final note = noteProvider.allNotes.firstWhere((n) => n.id == id);
+        selectedNotes.add(note);
+        if (note.isLocked) {
+          lockedCount++;
+        }
+      } catch (e) {
+        // Note not found, ignore
+      }
+    }
+
+    if (lockedCount > 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Unlock $lockedCount note${lockedCount > 1 ? 's' : ''} before sharing.')),
+        );
+      }
+      return;
+    }
+
+    final List<Note> notesToShare = selectedNotes.where((note) => !note.isLocked).toList();
+    if (notesToShare.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Selected notes are locked or could not be found.')),
+        );
+      }
+      return;
+    }
+
+    final String shareText = _buildShareText(notesToShare);
+    final String subjectText = notesToShare.length == 1
+        ? (notesToShare.first.title.isNotEmpty ? notesToShare.first.title : 'NoteStack Note')
+        : 'Multiple NoteStack Notes';
+
+    await SharePlus.instance.share(ShareParams(text: shareText, subject: subjectText));
+    noteProvider.clearSelection();
+  }
+
+  String _buildShareText(List<Note> notes) {
+    if (notes.length == 1) {
+      final note = notes.first;
+      return "Title: ${note.title}\nContent: ${note.plainTextContent}";
+    } else {
+      return notes.map((note) {
+        return "Title: ${note.title.isNotEmpty ? note.title : 'Untitled Note'}\nContent: ${note.plainTextContent}\n\n--------------------\n";
+      }).join("");
+    }
+  }
+
+  Widget _buildCategoryChips(NoteProvider noteProvider, double chipWidth, bool isSelectionMode) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Wrap(
+        spacing: 8.0,
+        runSpacing: 8.0,
+        alignment: WrapAlignment.start,
+        children: noteProvider.categories.map((category) {
+          final isSelected = noteProvider.selectedCategory == category;
+          final clampedChipWidth = chipWidth.clamp(80.0, 100.0);
+
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: clampedChipWidth,
+                height: 32,
+                child: ChoiceChip(
+                  label: Center(
+                    child: Text(
+                      category,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  selected: isSelected,
+                  onSelected: isSelectionMode || _isPerformingBulkAction
+                      ? null
+                      : (selected) {
+                    if (selected) {
+                      noteProvider.setCategory(category);
+                    }
+                  },
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  showCheckmark: false,
+                  selectedColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withAlpha(51),
+                  labelPadding: EdgeInsets.zero,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 300),
+                height: isSelected ? 3.0 : 0.0,
+                width: isSelected ? clampedChipWidth * 0.7 : 0.0,
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(1.5),
+                ),
+                margin: const EdgeInsets.only(top: 3.0),
+              ),
+            ],
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildNotesGrid(List<Note> filteredNotes, bool isSelectionMode, int selectedCount) {
+    if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          const double gridPadding = 8.0;
+          const double gridSpacing = 8.0;
+          const int columns = 2;
+          const int rows = 2;
+          final double availableWidth = constraints.maxWidth - (gridPadding * 2) - gridSpacing;
+          final double availableHeight = constraints.maxHeight - (gridPadding * 2) - gridSpacing;
+          final double cardWidth = availableWidth / columns;
+          final double cardHeight = availableHeight / rows;
+          final double aspectRatio = cardWidth / cardHeight;
+
+          return GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              childAspectRatio: aspectRatio,
+              crossAxisSpacing: gridSpacing,
+              mainAxisSpacing: gridSpacing,
+            ),
+            padding: EdgeInsets.fromLTRB(
+              gridPadding,
+              gridPadding,
+              gridPadding,
+              (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : gridPadding,
+            ),
+            itemCount: filteredNotes.length,
+            itemBuilder: (context, index) {
+              final note = filteredNotes[index];
+              return NoteCard(note: note, isGridView: true);
+            },
+          );
+        },
+      );
+    } else {
+      return GridView.builder(
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          childAspectRatio: 0.75,
+          crossAxisSpacing: 8.0,
+          mainAxisSpacing: 8.0,
+        ),
+        padding: EdgeInsets.fromLTRB(
+            8.0,
+            8.0,
+            8.0,
+            (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : 8.0
+        ),
+        itemCount: filteredNotes.length,
+        itemBuilder: (context, index) {
+          final note = filteredNotes[index];
+          return NoteCard(note: note, isGridView: true);
+        },
+      );
+    }
+  }
+
+  Widget _buildNotesList(List<Note> filteredNotes, NoteProvider noteProvider) {
+    return ListView.builder(
+      padding: EdgeInsets.only(
+          bottom: (_isSelectionMode(noteProvider) && noteProvider.selectedNoteIds.isNotEmpty) || _isShowingInlineUnlock
+              ? 88.0
+              : 8.0
+      ),
+      itemCount: filteredNotes.length,
+      itemBuilder: (context, index) {
+        final note = filteredNotes[index];
+        final noteCardListItem = NoteCard(note: note);
+
+        if (!_isGridView && (_swipeToDeleteNotesEnabled || _swipeToArchiveNotesEnabled)) {
+          return _buildDismissibleNoteCard(note, noteCardListItem, noteProvider);
+        }
+
+        return noteCardListItem;
+      },
+    );
+  }
+
+  Widget _buildDismissibleNoteCard(Note note, Widget noteCardListItem, NoteProvider noteProvider) {
+    DismissDirection direction = DismissDirection.none;
+    Widget? background;
+    Widget? secondaryBackground;
+
+    if (_swipeToDeleteNotesEnabled && _swipeToArchiveNotesEnabled) {
+      direction = DismissDirection.horizontal;
+      background = Container(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20.0),
+        child: Icon(Icons.archive_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
+      );
+      secondaryBackground = Container(
+        color: Theme.of(context).colorScheme.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        child: Icon(Icons.delete_sweep_outlined, color: Theme.of(context).colorScheme.onErrorContainer),
+      );
+    } else if (_swipeToArchiveNotesEnabled) {
+      direction = DismissDirection.startToEnd;
+      background = Container(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 20.0),
+        child: Icon(Icons.archive_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
+      );
+    } else if (_swipeToDeleteNotesEnabled) {
+      direction = DismissDirection.endToStart;
+      background = Container(
+        color: Theme.of(context).colorScheme.errorContainer,
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20.0),
+        child: Icon(Icons.delete_sweep_outlined, color: Theme.of(context).colorScheme.onErrorContainer),
+      );
+    }
+
+    if (direction != DismissDirection.none) {
+      return Dismissible(
+        key: ValueKey(note.id),
+        background: background,
+        secondaryBackground: secondaryBackground,
+        direction: direction,
+        confirmDismiss: (dismissDirection) => _confirmNoteDismiss(note, dismissDirection),
+        onDismissed: (dismissDirection) => _handleNoteDismiss(note, dismissDirection, noteProvider),
+        child: noteCardListItem,
+      );
+    }
+
+    return noteCardListItem;
+  }
+
+  Future<bool?> _confirmNoteDismiss(Note note, DismissDirection dismissDirection) async {
+    if (_isPerformingBulkAction) return false;
+
+    // Allow archiving locked notes
+    if (dismissDirection == DismissDirection.startToEnd) {
+      return true;
+    }
+
+    // For deleting, check if locked
+    if (note.isLocked && dismissDirection == DismissDirection.endToStart) {
+      _showLockedNotesInfoDialog(
+        context,
+        title: 'Cannot Delete Locked Note',
+        content: 'Please unlock this note before deleting.',
+      );
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _handleNoteDismiss(Note note, DismissDirection dismissDirection, NoteProvider noteProvider) async {
+    final String noteTitle = note.title.isNotEmpty ? note.title : "Untitled note";
+    bool isArchive = dismissDirection == DismissDirection.startToEnd;
+
+    if (isArchive) {
+      await _performSwipeAction(
+            () => noteProvider.archiveNote(note.id, isSwipeArchive: true),
+        '"$noteTitle" archived',
+        noteProvider,
+        isUndoForArchive: true,
+      );
+    } else { // Is Delete
+      await _performSwipeAction(
+            () => noteProvider.deleteNote(note.id, isSwipeDelete: true),
+        '"$noteTitle" deleted',
+        noteProvider,
+        isUndoForArchive: false,
+      );
+    }
+  }
+
+  Future<void> _performSwipeAction(
+      Future<void> Function() action,
+      String successMessage,
+      NoteProvider noteProvider,
+      {required bool isUndoForArchive}
+      ) async {
+    if (!mounted) return;
+
+    setState(() {
+      _isPerformingBulkAction = true;
+    });
+
+    try {
+      await action();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).removeCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(successMessage),
+            action: SnackBarAction(
+              label: 'Undo',
+              onPressed: () async {
+                if (!mounted) return;
+                setState(() {
+                  _isPerformingBulkAction = true;
+                });
+                try {
+                  if (isUndoForArchive) {
+                    await noteProvider.undoArchiveNote();
+                  } else {
+                    await noteProvider.undoDeleteNote();
+                  }
+                } finally {
+                  if (mounted) {
+                    setState(() {
+                      _isPerformingBulkAction = false;
+                    });
+                  }
+                }
+              },
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPerformingBulkAction = false;
+        });
+      }
+    }
+  }
+
+  bool _isSelectionMode(NoteProvider noteProvider) {
+    return noteProvider.isSelectionMode;
   }
 
   @override
@@ -676,185 +1305,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         final filteredNotes = noteProvider.getFilteredNotes();
         final screenWidth = MediaQuery.of(context).size.width;
         final categoryCount = noteProvider.categories.length;
+        final double chipWidth = categoryCount > 0 ? (screenWidth - 16 - (categoryCount - 1) * 8) / categoryCount : 80.0;
 
-        final double chipWidth;
-        if (categoryCount > 0) {
-          chipWidth = (screenWidth - 16 - (categoryCount - 1) * 8) / categoryCount;
-        } else {
-          chipWidth = 80.0;
-        }
-
-        final bool isSelectionMode = noteProvider.isSelectionMode;
+        final bool isSelectionMode = _isSelectionMode(noteProvider);
         final int selectedCount = noteProvider.selectedNoteIds.length;
 
-        bool showUnpinAction = false;
-        if (isSelectionMode && selectedCount > 0) {
-          showUnpinAction = noteProvider.selectedNoteIds.every((id) {
-            try {
-              final note = noteProvider.allNotes.firstWhere((note) => note.id == id);
-              return note.isPinned;
-            } catch (e) {
-              return false;
-            }
-          });
-        }
+        final bool showUnpinAction = isSelectionMode && selectedCount > 0 &&
+            noteProvider.selectedNoteIds.every((id) {
+              try {
+                final note = noteProvider.allNotes.firstWhere((note) => note.id == id);
+                return note.isPinned;
+              } catch (e) {
+                return false;
+              }
+            });
 
-        bool showUnlockAction = false;
-        if (isSelectionMode && selectedCount > 0) {
-          showUnlockAction = noteProvider.selectedNoteIds.every((id) {
-            try {
-              final note = noteProvider.allNotes.firstWhere((note) => note.id == id);
-              return note.isLocked;
-            } catch (e) {
-              return false;
-            }
-          });
-        }
-        
-        List<Widget> normalModeActions = [
-          IconButton(
-            icon: const Icon(Icons.search),
-            tooltip: 'Search',
-            onPressed: () {
-              showSearch(
-                context: context,
-                delegate: NotesSearchDelegate(isGridView: _isGridView),
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            splashRadius: 20.0,
-            offset: const Offset(0, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            elevation: 4,
-            onSelected: (String result) async { 
-              if (result == 'checklist') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ChecklistScreen()),
-                );
-              } else if (result == 'archived') {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ArchivesScreen()),
-                );
-              } else if (result == 'settings') {
-                await Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                );
-                _loadSwipePreferences(); // Reload all swipe preferences
-                _loadViewPreference(); 
+        final bool showUnlockAction = isSelectionMode && selectedCount > 0 &&
+            noteProvider.selectedNoteIds.every((id) {
+              try {
+                final note = noteProvider.allNotes.firstWhere((note) => note.id == id);
+                return note.isLocked;
+              } catch (e) {
+                return false;
               }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              PopupMenuItem<String>(
-                value: 'checklist',
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.checklist_rtl_outlined, color: Theme.of(context).iconTheme.color?.withAlpha(179)),
-                    const SizedBox(width: 12),
-                    const Text('Checklist', style: TextStyle(fontSize: 16.0)),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'archived',
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.archive_outlined, color: Theme.of(context).iconTheme.color?.withAlpha(179)),
-                    const SizedBox(width: 12),
-                    const Text('Archived', style: TextStyle(fontSize: 16.0)),
-                  ],
-                ),
-              ),
-              PopupMenuItem<String>(
-                value: 'settings',
-                child: Row(
-                  children: <Widget>[
-                    Icon(Icons.settings_outlined, color: Theme.of(context).iconTheme.color?.withAlpha(179)),
-                    const SizedBox(width: 12),
-                    const Text('Settings', style: TextStyle(fontSize: 16.0)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ];
-
-        List<Widget> selectionModeActions = [
-          IconButton(
-            icon: const Icon(Icons.share),
-            tooltip: 'Share',
-            onPressed: () async {
-              if (noteProvider.selectedNoteIds.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('No notes selected to share.')),
-                );
-                return;
-              }
-              List<Note> selectedNotes = [];
-              int lockedCount = 0;
-              for (String id in noteProvider.selectedNoteIds) {
-                try {
-                  final note = noteProvider.allNotes.firstWhere((n) => n.id == id);
-                  selectedNotes.add(note);
-                  if (note.isLocked) {
-                    lockedCount++;
-                  }
-                } catch (e) {/* Note not found, ignore */}
-              }
-              if (lockedCount > 0) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Unlock $lockedCount note${lockedCount > 1 ? 's' : ''} before sharing.')),
-                );
-                return;
-              }
-              List<Note> notesToShare = selectedNotes.where((note) => !note.isLocked).toList();
-              if (notesToShare.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Selected notes are locked or could not be found.')),
-                );
-                return;
-              }
-              String shareText = '';
-              String subjectText = 'NoteStack Note';
-              if (notesToShare.length == 1) {
-                final note = notesToShare.first;
-                shareText = "Title: ${note.title}\nContent: ${note.content}";
-                subjectText = note.title.isNotEmpty ? note.title : 'NoteStack Note';
-              } else {
-                shareText = notesToShare.map((note) {
-                  return "Title: ${note.title.isNotEmpty ? note.title : 'Untitled Note'}\nContent: ${note.content}\n\n--------------------\n";
-                }).join("");
-                subjectText = 'Multiple NoteStack Notes';
-              }
-              await SharePlus.instance.share(ShareParams(text: shareText, subject: subjectText));
-              noteProvider.clearSelection();
-            },
-          ),
-        ];
-
-        if (Platform.isWindows) {
-          normalModeActions = [
-            Padding(
-              padding: const EdgeInsets.only(right: 10.0),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: normalModeActions,
-              ),
-            ),
-          ];
-          selectionModeActions = [
-            Padding(
-              padding: const EdgeInsets.only(right: 10.0),
-              child: selectionModeActions.first, // Assuming Share is the only icon
-            ),
-          ];
-        }
+            });
 
         return Scaffold(
           appBar: AppBar(
@@ -862,7 +1336,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                 ? IconButton(
               icon: const Icon(Icons.close),
               tooltip: 'Cancel selection',
-              onPressed: () {
+              onPressed: _isPerformingBulkAction ? null : () {
                 noteProvider.clearSelection();
                 if (_isShowingInlineUnlock) {
                   _inlinePasswordController.clear();
@@ -892,246 +1366,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
             centerTitle: true,
             actions: isSelectionMode
-                ? selectionModeActions
-                : normalModeActions,
+                ? _buildSelectionModeActions(noteProvider)
+                : _buildNormalModeActions(),
           ),
           body: Stack(
             children: [
               Column(
                 children: [
                   if (noteProvider.categories.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Wrap(
-                        spacing: 8.0,
-                        runSpacing: 8.0,
-                        alignment: WrapAlignment.start,
-                        children: noteProvider.categories.map((category) {
-                          final isSelected = noteProvider.selectedCategory == category;
-                          final clampedChipWidth = chipWidth.clamp(80.0, 100.0);
-                          return Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: clampedChipWidth,
-                                height: 32,
-                                child: ChoiceChip(
-                                  label: Center(
-                                    child: Text(
-                                      category,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  selected: isSelected,
-                                  onSelected: isSelectionMode
-                                      ? null  
-                                      : (selected) {
-                                    if (selected) {
-                                      noteProvider.setCategory(category);
-                                    }
-                                  },
-                                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  showCheckmark: false,
-                                  selectedColor: Theme.of(context)
-                                      .colorScheme
-                                      .primary
-                                      .withAlpha(51),
-                                  labelPadding: EdgeInsets.zero,
-                                  materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                                ),
-                              ),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 300),
-                                height: isSelected ? 3.0 : 0.0,
-                                width: isSelected ? clampedChipWidth * 0.7 : 0.0,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(1.5),
-                                ),
-                                margin: const EdgeInsets.only(top: 3.0),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                    _buildCategoryChips(noteProvider, chipWidth, isSelectionMode),
                   Expanded(
                     child: filteredNotes.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: <Widget>[
-                                Icon(
-                                  Icons.note_add_outlined,
-                                  size: 64,
-                                  color: Colors.grey[600],
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  'No notes yet. Add one!',
-                                  style: TextStyle(fontSize: 18, color: Colors.grey[600]),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
-                            ),
-                          )
+                        ? _buildEmptyState()
                         : _isGridView
-                            ? (Platform.isWindows || Platform.isMacOS || Platform.isLinux
-                                ? LayoutBuilder(
-                                    builder: (context, constraints) {
-                                      // Calculate available width/height for cards
-                                      final double gridPadding = 8.0;
-                                      final double gridSpacing = 8.0;
-                                      final int columns = 2;
-                                      final int rows = 2;
-                                      final double availableWidth = constraints.maxWidth - (gridPadding * 2) - gridSpacing;
-                                      final double availableHeight = constraints.maxHeight - (gridPadding * 2) - gridSpacing;
-                                      final double cardWidth = availableWidth / columns;
-                                      final double cardHeight = availableHeight / rows;
-                                      final double aspectRatio = cardWidth / cardHeight;
-                                      return GridView.builder(
-                                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                                          crossAxisCount: columns,
-                                          childAspectRatio: aspectRatio,
-                                          crossAxisSpacing: gridSpacing,
-                                          mainAxisSpacing: gridSpacing,
-                                        ),
-                                        padding: EdgeInsets.fromLTRB(
-                                          gridPadding,
-                                          gridPadding,
-                                          gridPadding,
-                                          (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : gridPadding,
-                                        ),
-                                        itemCount: filteredNotes.length,
-                                        itemBuilder: (context, index) {
-                                          final note = filteredNotes[index];
-                                          return NoteCard(note: note, isGridView: true);
-                                        },
-                                      );
-                                    },
-                                  )
-                                : GridView.builder(
-                                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 2, // Mobile/tablet: original grid
-                                      childAspectRatio: 0.75,
-                                      crossAxisSpacing: 8.0,
-                                      mainAxisSpacing: 8.0,
-                                    ),
-                                    padding: EdgeInsets.fromLTRB(8.0, 8.0, 8.0, (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : 8.0),
-                                    itemCount: filteredNotes.length,
-                                    itemBuilder: (context, index) {
-                                      final note = filteredNotes[index];
-                                      return NoteCard(note: note, isGridView: true);
-                                    }))
-                            : ListView.builder(
-                                padding: EdgeInsets.only(bottom: (isSelectionMode && selectedCount > 0) || _isShowingInlineUnlock ? 88.0 : 8.0), 
-                                itemCount: filteredNotes.length,
-                                itemBuilder: (context, index) {
-                                  final note = filteredNotes[index];
-                                  Widget noteCardListItem = NoteCard(note: note);
-
-                                  if (!_isGridView && (_swipeToDeleteNotesEnabled || _swipeToArchiveNotesEnabled)) {
-                                    DismissDirection direction = DismissDirection.none;
-                                    Widget? background;
-                                    Widget? secondaryBackground;
-
-                                    if (_swipeToDeleteNotesEnabled && _swipeToArchiveNotesEnabled) {
-                                      direction = DismissDirection.horizontal;
-                                      background = Container(
-                                        color: Theme.of(context).colorScheme.primaryContainer, // Archive background (swipe right)
-                                        alignment: Alignment.centerLeft,
-                                        padding: const EdgeInsets.only(left: 20.0),
-                                        child: Icon(Icons.archive_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
-                                      );
-                                      secondaryBackground = Container(
-                                        color: Theme.of(context).colorScheme.errorContainer, // Delete background (swipe left)
-                                        alignment: Alignment.centerRight,
-                                        padding: const EdgeInsets.only(right: 20.0),
-                                        child: Icon(Icons.delete_sweep_outlined, color: Theme.of(context).colorScheme.onErrorContainer),
-                                      );
-                                    } else if (_swipeToArchiveNotesEnabled) {
-                                      direction = DismissDirection.startToEnd; // Swipe right to archive
-                                      background = Container(
-                                        color: Theme.of(context).colorScheme.primaryContainer,
-                                        alignment: Alignment.centerLeft,
-                                        padding: const EdgeInsets.only(left: 20.0),
-                                        child: Icon(Icons.archive_outlined, color: Theme.of(context).colorScheme.onPrimaryContainer),
-                                      );
-                                    } else if (_swipeToDeleteNotesEnabled) {
-                                      direction = DismissDirection.endToStart; // Swipe left to delete
-                                      background = Container(
-                                        color: Theme.of(context).colorScheme.errorContainer,
-                                        alignment: Alignment.centerRight,
-                                        padding: const EdgeInsets.only(right: 20.0),
-                                        child: Icon(Icons.delete_sweep_outlined, color: Theme.of(context).colorScheme.onErrorContainer),
-                                      );
-                                    }
-
-                                    if (direction != DismissDirection.none) {
-                                      return Dismissible(
-                                        key: ValueKey(note.id),
-                                        background: background, 
-                                        secondaryBackground: secondaryBackground, 
-                                        direction: direction,
-                                        confirmDismiss: (dismissDirection) async {
-                                          if (note.isLocked) {
-                                            String actionText = dismissDirection == DismissDirection.startToEnd ? "archive" : "delete";
-                                            _showLockedNotesInfoDialog(context, 
-                                              title: 'Cannot ${actionText[0].toUpperCase()}${actionText.substring(1)} Locked Note',
-                                              content: 'Please unlock this note before ${actionText}ing.'
-                                            );
-                                            return false; // Do not dismiss if locked
-                                          }
-                                          return true; // Allow dismiss if not locked
-                                        },
-                                        onDismissed: (dismissDirection) {
-                                          final noteTitle = note.title.isNotEmpty ? note.title : "Untitled note";
-                                          if (dismissDirection == DismissDirection.startToEnd) { // Swiped right (Archive)
-                                            noteProvider.archiveNote(note.id, isSwipeArchive: true);
-                                            ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('"$noteTitle" archived'),
-                                                action: SnackBarAction(
-                                                  label: 'Undo',
-                                                  onPressed: () {
-                                                    noteProvider.undoArchiveNote();
-                                                  },
-                                                ),
-                                              ),
-                                            );
-                                          } else if (dismissDirection == DismissDirection.endToStart) { // Swiped left (Delete)
-                                            noteProvider.deleteNote(note.id, isSwipeDelete: true);
-                                            ScaffoldMessenger.of(context).removeCurrentSnackBar();
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('"$noteTitle" deleted'),
-                                                action: SnackBarAction(
-                                                  label: 'Undo',
-                                                  onPressed: () {
-                                                    noteProvider.undoDeleteNote();
-                                                  },
-                                                ),
-                                              ),
-                                            );
-                                          }
-                                        },
-                                        child: noteCardListItem,
-                                      );
-                                    }
-                                  }
-                                  return noteCardListItem;
-                                }),
+                        ? _buildNotesGrid(filteredNotes, isSelectionMode, selectedCount)
+                        : _buildNotesList(filteredNotes, noteProvider),
                   ),
                 ],
               ),
@@ -1143,32 +1392,53 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                   child: _isShowingInlineUnlock
                       ? _buildInlineUnlockBar(context, noteProvider)
                       : _buildSelectionBottomSheet(
-                          context,
-                          noteProvider,
-                          showUnpinAction,
-                          showUnlockAction,
-                        ),
+                    context,
+                    noteProvider,
+                    showUnpinAction,
+                    showUnlockAction,
+                  ),
                 ),
             ],
           ),
-          floatingActionButton: !isSelectionMode && !_isShowingInlineUnlock
+          floatingActionButton: !isSelectionMode && !_isShowingInlineUnlock && !_isPerformingBulkAction
               ? _AnimatedFabMenu(
-                  onNewNote: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const NoteScreen()),
-                    );
-                  },
-                  onChecklist: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const ChecklistScreen()),
-                    );
-                  },
-                )
+            onNewNote: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const NoteScreen()),
+              );
+            },
+            onChecklist: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ChecklistScreen()),
+              );
+            },
+          )
               : null,
         );
       },
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: <Widget>[
+          Icon(
+            Icons.note_add_outlined,
+            size: 64,
+            color: Colors.grey[600],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'No notes yet. Add one!',
+            style: TextStyle(fontSize: 18, color: Colors.grey[600]),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }

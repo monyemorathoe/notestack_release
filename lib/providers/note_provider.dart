@@ -23,13 +23,12 @@ class NoteProvider with ChangeNotifier {
 
   Set<String> get selectedNoteIds => _selectedNoteIds;
   bool get isSelectionMode => _isSelectionMode;
-  List<Note> get allNotes => _allNotes; // Primarily for internal use or specific cases like Archives
+  List<Note> get allNotes => List.unmodifiable(_allNotes); // Return unmodifiable list
 
   NoteProvider() {
     loadNotes();
   }
 
-  // Helper to convert Quill Delta JSON string to plain text
   String _getPlainTextFromDeltaJson(String deltaJson) {
     if (deltaJson.isEmpty) {
       return '';
@@ -39,9 +38,7 @@ class NoteProvider with ChangeNotifier {
       final doc = Document.fromJson(jsonData);
       return doc.toPlainText().trim();
     } catch (e) {
-      // Fallback for old plain text data or if JSON is invalid
-      // print("Error decoding JSON in provider, using raw content: $e");
-      return deltaJson.trim(); 
+      return deltaJson.trim();
     }
   }
 
@@ -51,6 +48,16 @@ class NoteProvider with ChangeNotifier {
 
   void _clearLastArchived() {
     _lastArchivedNote = null;
+  }
+
+  void _sortNotes() {
+    _allNotes.sort((a, b) {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      final modCompare = (b.modifiedAt ?? b.createdAt).compareTo(a.modifiedAt ?? a.createdAt);
+      if (modCompare != 0) return modCompare;
+      return b.createdAt.compareTo(a.createdAt);
+    });
   }
 
   void setCategory(String? category) {
@@ -63,6 +70,7 @@ class NoteProvider with ChangeNotifier {
 
   Future<void> loadNotes() async {
     _allNotes = await DatabaseHelper.instance.getNotes();
+    _sortNotes(); // Ensure notes are sorted after loading
     notifyListeners();
   }
 
@@ -76,27 +84,27 @@ class NoteProvider with ChangeNotifier {
       plainTextContent: plainTextContent,
       category: category,
       createdAt: now,
-      modifiedAt: now, 
+      modifiedAt: now,
       isArchived: false,
       isPinned: false,
       isLocked: false,
       colorValue: colorValue,
     );
     await DatabaseHelper.instance.insertNote(note);
+    _allNotes.add(note); // Optimistic add
+    _sortNotes();
     _clearLastDeleted();
     _clearLastArchived();
-    await loadNotes();
+    notifyListeners();
   }
 
-  Future<void> updateNote(Note note) async {
-    // When a note is fundamentally updated (e.g. title or content change),
-    // its plainTextContent is re-derived from the main content.
+  Future<void> updateNote(Note note, {bool skipSortAndNotify = false}) async {
     final plainTextContent = _getPlainTextFromDeltaJson(note.content);
     final Note noteToUpdate = Note(
       id: note.id,
       title: note.title,
       content: note.content,
-      plainTextContent: plainTextContent, // Ensure this is passed
+      plainTextContent: plainTextContent,
       category: note.category,
       createdAt: note.createdAt,
       modifiedAt: DateTime.now(),
@@ -105,121 +113,169 @@ class NoteProvider with ChangeNotifier {
       isLocked: note.isLocked,
       colorValue: note.colorValue,
     );
+    
+    final index = _allNotes.indexWhere((n) => n.id == noteToUpdate.id);
+    if (index != -1) {
+      _allNotes[index] = noteToUpdate; // Optimistic update
+    }
+    
+    if (!skipSortAndNotify) {
+      _sortNotes();
+      _clearLastDeleted();
+      _clearLastArchived();
+      notifyListeners();
+    }
+
     await DatabaseHelper.instance.updateNote(noteToUpdate);
-    _clearLastDeleted();
-    _clearLastArchived();
-    await loadNotes();
   }
 
   Future<void> deleteNote(String id, {bool isSwipeDelete = false}) async {
+    Note? noteToDelete;
+    int originalIndex = -1;
+
     try {
-      final noteToDelete = _allNotes.firstWhere((note) => note.id == id);
+      originalIndex = _allNotes.indexWhere((note) => note.id == id);
+      if (originalIndex != -1) {
+        noteToDelete = _allNotes[originalIndex];
+      } else {
+        return; // Note not found in local list
+      }
+
       if (isSwipeDelete) {
         _lastDeletedNote = noteToDelete;
-        _clearLastArchived(); // Clear other undo types
-      }
-    } catch (e) {
-      _lastDeletedNote = null;
-      return;
-    }
-    
-    await DatabaseHelper.instance.deleteNote(id);
-    _selectedNoteIds.remove(id);
-    
-    if (!isSwipeDelete) {
+        _clearLastArchived();
+      } else {
         _clearLastDeleted();
+      }
+
+      _allNotes.removeAt(originalIndex); // Optimistic remove
+      _selectedNoteIds.remove(id);
+      notifyListeners(); // Notify immediately
+
+      await DatabaseHelper.instance.deleteNote(id);
+
+    } catch (e) {
+      // print("Error deleting note: $e");
+      if (noteToDelete != null && isSwipeDelete && originalIndex != -1) {
+        // Revert optimistic delete if DB operation failed for swipe
+        _allNotes.insert(originalIndex, noteToDelete);
+        _lastDeletedNote = null; // Clear undo state as it failed
+        notifyListeners();
+      }
+      // For non-swipe deletes, or if re-adding fails, a full loadNotes() might be a fallback.
+      // Consider a more robust error handling / user notification strategy here.
     }
-    await loadNotes();
   }
 
   Future<void> undoDeleteNote() async {
     if (_lastDeletedNote != null) {
-      await DatabaseHelper.instance.insertNote(_lastDeletedNote!); 
-      await loadNotes(); 
-      _clearLastDeleted(); 
+      Note noteToRestore = _lastDeletedNote!;
+      _allNotes.add(noteToRestore); // Optimistic add back
+      _sortNotes();
+      _lastDeletedNote = null;
+      notifyListeners(); // Notify immediately
+
+      try {
+        await DatabaseHelper.instance.insertNote(noteToRestore);
+      } catch (e) {
+        // print("Error undoing delete: $e");
+        // Revert optimistic undo if DB operation failed
+        _allNotes.removeWhere((n) => n.id == noteToRestore.id);
+        notifyListeners();
+        // Consider a more robust error handling / user notification strategy here.
+      }
     }
   }
 
   Future<void> archiveNote(String id, {bool isSwipeArchive = false}) async {
-    Note? noteToArchive;
+    Note? originalNote;
+    int originalIndex = -1;
+
     try {
-      noteToArchive = _allNotes.firstWhere((note) => note.id == id);
-    } catch (e) {
-      return;
-    }
+      originalIndex = _allNotes.indexWhere((note) => note.id == id);
+      if (originalIndex != -1) {
+        originalNote = _allNotes[originalIndex];
+      } else {
+        return; // Note not found
+      }
 
-    if (isSwipeArchive) {
-      _lastArchivedNote = noteToArchive;
-      _clearLastDeleted(); 
-    }
-    // For archiving, content doesn't change, so plainTextContent is carried over.
-    Note updatedNote = Note(
-      id: noteToArchive.id,
-      title: noteToArchive.title,
-      content: noteToArchive.content,
-      plainTextContent: noteToArchive.plainTextContent, // Carry over existing plainTextContent
-      category: noteToArchive.category,
-      createdAt: noteToArchive.createdAt,
-      modifiedAt: DateTime.now(),
-      isArchived: true, 
-      isPinned: noteToArchive.isPinned, 
-      isLocked: noteToArchive.isLocked,
-      colorValue: noteToArchive.colorValue,
-    );
-    await DatabaseHelper.instance.updateNote(updatedNote);
-    _selectedNoteIds.remove(id); 
+      Note updatedNote = originalNote.copyWith(
+        isArchived: true,
+        modifiedAt: DateTime.now(),
+      );
 
-    if (!isSwipeArchive) {
+      if (isSwipeArchive) {
+        _lastArchivedNote = originalNote; // Store original for undo
+        _clearLastDeleted();
+      } else {
         _clearLastArchived();
+      }
+
+      _allNotes[originalIndex] = updatedNote; // Optimistic update
+      _selectedNoteIds.remove(id);
+      _sortNotes(); // Re-sort as archiving can affect filtered list
+      notifyListeners(); // Notify immediately
+
+      await DatabaseHelper.instance.updateNote(updatedNote);
+
+    } catch (e) {
+      // print("Error archiving note: $e");
+      if (originalNote != null && isSwipeArchive && originalIndex != -1) {
+        // Revert optimistic archive if DB operation failed for swipe
+        _allNotes[originalIndex] = originalNote;
+        _lastArchivedNote = null;
+        _sortNotes();
+        notifyListeners();
+      }
+      // Consider a more robust error handling.
     }
-    await loadNotes();
   }
 
   Future<void> undoArchiveNote() async {
     if (_lastArchivedNote != null) {
-      Note noteToUnarchive = _lastArchivedNote!;
-      // For undoing archive, content doesn't change, so plainTextContent is carried over.
-      Note updatedNote = Note(
-        id: noteToUnarchive.id,
-        title: noteToUnarchive.title,
-        content: noteToUnarchive.content,
-        plainTextContent: noteToUnarchive.plainTextContent, // Carry over existing plainTextContent
-        category: noteToUnarchive.category,
-        createdAt: noteToUnarchive.createdAt,
-        modifiedAt: DateTime.now(), 
-        isArchived: false, 
-        isPinned: noteToUnarchive.isPinned,
-        isLocked: noteToUnarchive.isLocked,
-        colorValue: noteToUnarchive.colorValue,
+      Note noteToRestoreOriginalState = _lastArchivedNote!;
+      Note noteToUnarchive = noteToRestoreOriginalState.copyWith(
+        isArchived: false,
+        modifiedAt: DateTime.now(),
       );
-      await DatabaseHelper.instance.updateNote(updatedNote);
-      await loadNotes();
-      _clearLastArchived();
+      
+      int index = _allNotes.indexWhere((n) => n.id == noteToUnarchive.id);
+      if (index != -1) {
+        _allNotes[index] = noteToUnarchive; // Optimistic update
+      }
+      _sortNotes();
+      _lastArchivedNote = null;
+      notifyListeners(); // Notify immediately
+
+      try {
+        await DatabaseHelper.instance.updateNote(noteToUnarchive);
+      } catch (e) {
+        // print("Error undoing archive: $e");
+        // Revert optimistic undo if DB operation failed
+        if (index != -1) {
+           _allNotes[index] = noteToRestoreOriginalState; // Restore original archived state
+        }
+        _sortNotes();
+        notifyListeners();
+        // Consider a more robust error handling.
+      }
     }
   }
 
   List<Note> getFilteredNotes() {
     List<Note> unarchivedNotes = _allNotes.where((note) => !note.isArchived).toList();
-    List<Note> categoryFilteredNotes;
+    // _sortNotes() is called after any modification to _allNotes, so it's already sorted.
+    // We just filter by category here.
     if (_selectedCategory == 'All' || _selectedCategory == null) {
-      categoryFilteredNotes = unarchivedNotes;
+      return unarchivedNotes;
     } else {
-      categoryFilteredNotes = unarchivedNotes.where((note) => note.category == _selectedCategory).toList();
+      return unarchivedNotes.where((note) => note.category == _selectedCategory).toList();
     }
-    categoryFilteredNotes.sort((a, b) {
-      if (a.isPinned && !b.isPinned) return -1;
-      if (!a.isPinned && b.isPinned) return 1;
-      final modCompare = (b.modifiedAt ?? b.createdAt).compareTo(a.modifiedAt ?? a.createdAt);
-      if (modCompare != 0) return modCompare;
-      return b.createdAt.compareTo(a.createdAt);
-    });
-    return categoryFilteredNotes;
   }
 
   List<Note> get archivedNotes {
-    return _allNotes.where((note) => note.isArchived).toList()..sort((a,b) => 
-        (b.modifiedAt ?? b.createdAt).compareTo(a.modifiedAt ?? a.createdAt)
-    );
+    // _sortNotes() ensures _allNotes is sorted correctly.
+    return _allNotes.where((note) => note.isArchived).toList();
   }
 
   void toggleNoteSelection(String noteId) {
@@ -250,39 +306,56 @@ class NoteProvider with ChangeNotifier {
     return _selectedNoteIds.contains(noteId);
   }
 
+  // For bulk operations, we might still want to do a full load or ensure consistency.
+  // The swipe actions are the most sensitive to the Dismissible issue.
+
   Future<void> archiveSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
-    for (String noteId in Set.from(_selectedNoteIds)) {
-      await archiveNote(noteId, isSwipeArchive: false); 
+    List<String> idsToProcess = List.from(_selectedNoteIds);
+    _clearSelection(); // Clear selection early for UI responsiveness
+    notifyListeners();
+
+    for (String noteId in idsToProcess) {
+      await archiveNote(noteId, isSwipeArchive: false);
     }
-    _clearLastArchived(); 
-    _clearSelection();
-    await loadNotes(); 
+    // No explicit loadNotes() here if archiveNote handles its optimistic update correctly.
+    // However, since multiple items are changed, a final sort and notify might be good.
+    _sortNotes();
+    notifyListeners();
   }
 
   Future<void> unarchiveSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
-    for (String noteId in Set.from(_selectedNoteIds)) {
-      Note noteToUnarchive = _allNotes.firstWhere((note) => note.id == noteId, orElse: () => throw Exception("Note $noteId not found for unarchiving"));
-      // For unarchiving, content doesn't change, so plainTextContent is carried over.
-      Note updatedNote = Note(
-        id: noteToUnarchive.id,
-        title: noteToUnarchive.title,
-        content: noteToUnarchive.content,
-        plainTextContent: noteToUnarchive.plainTextContent, // Carry over existing plainTextContent
-        category: noteToUnarchive.category,
-        createdAt: noteToUnarchive.createdAt,
-        modifiedAt: DateTime.now(),
-        isArchived: false,
-        isPinned: noteToUnarchive.isPinned,
-        isLocked: noteToUnarchive.isLocked,
-        colorValue: noteToUnarchive.colorValue,
-      );
-      await DatabaseHelper.instance.updateNote(updatedNote);
+    List<String> idsToProcess = List.from(_selectedNoteIds);
+     _clearSelection(); // Clear selection early
+    notifyListeners();
+
+    for (String noteId in idsToProcess) {
+       Note? originalNote;
+      int originalIndex = -1;
+      try {
+        originalIndex = _allNotes.indexWhere((note) => note.id == noteId);
+        if (originalIndex != -1) {
+          originalNote = _allNotes[originalIndex];
+        } else {
+          continue; 
+        }
+
+        Note updatedNote = originalNote.copyWith(
+          isArchived: false,
+          modifiedAt: DateTime.now(),
+        );
+        _allNotes[originalIndex] = updatedNote; // Optimistic
+        await DatabaseHelper.instance.updateNote(updatedNote);
+      } catch (e) {
+        // print("Error unarchiving note $noteId: $e");
+        if(originalNote != null && originalIndex != -1) {
+          _allNotes[originalIndex] = originalNote; // Revert
+        }
+      }
     }
-    _clearLastArchived();
-    _clearSelection();
-    await loadNotes();
+    _sortNotes();
+    notifyListeners();
   }
 
   Future<bool> deleteSelectedNotes() async {
@@ -306,36 +379,41 @@ class NoteProvider with ChangeNotifier {
       notifyListeners(); 
       return false;
     }
+    List<String> idsToDelete = List.from(_selectedNoteIds);
+    _clearSelection(); // Clear selection early
+    notifyListeners();
+    
+    List<Note> successfullyDeletedNotesForUI = [];
 
-    for (String id in Set.from(_selectedNoteIds)) {
-      await DatabaseHelper.instance.deleteNote(id);
+    for (String id in idsToDelete) {
+      int originalIndex = _allNotes.indexWhere((note) => note.id == id);
+      if (originalIndex != -1) {
+        successfullyDeletedNotesForUI.add(_allNotes.removeAt(originalIndex)); // Optimistic remove
+      }
+    }
+    notifyListeners(); // Notify after all local removals
+
+    for (String id in idsToDelete) { // DB operations
+        try {
+            await DatabaseHelper.instance.deleteNote(id);
+        } catch(e) {
+            // print("Failed to delete $id from DB. It was already removed from UI.");
+            // Optionally, re-add to _allNotes if critical, or log error
+        }
     }
     _clearLastDeleted(); 
     _clearLastArchived();
-    _clearSelection();
-    await loadNotes();
+    // _sortNotes(); // Already sorted as we only removed items or handled order above
+    // notifyListeners(); // Already notified
     return true;
   }
 
   Future<void> togglePinNote(Note note) async {
-    // For toggling pin, content doesn't change, so plainTextContent is carried over.
-    final Note updatedNote = Note(
-      id: note.id,
-      title: note.title,
-      content: note.content,
-      plainTextContent: note.plainTextContent, // Carry over existing plainTextContent
-      category: note.category,
-      createdAt: note.createdAt,
-      modifiedAt: DateTime.now(),
-      isArchived: note.isArchived,
+    final Note updatedNote = note.copyWith(
       isPinned: !note.isPinned,
-      isLocked: note.isLocked,
-      colorValue: note.colorValue,
+      modifiedAt: DateTime.now(),
     );
-    await DatabaseHelper.instance.updateNote(updatedNote);
-    _clearLastDeleted();
-    _clearLastArchived();
-    await loadNotes();
+    await updateNote(updatedNote);
   }
 
   Future<void> _updateLockStatusForSelectedNotes(bool lock) async {
@@ -348,33 +426,25 @@ class NoteProvider with ChangeNotifier {
     }
 
     List<String> idsToProcess = List.from(_selectedNoteIds);
+    _clearSelection(); // Clear selection early for UI
+    notifyListeners();
 
     for (String id in idsToProcess) {
-      try {
-        Note currentNote = _allNotes.firstWhere((note) => note.id == id);
-        if (currentNote.isLocked != lock) {
-          // For locking/unlocking, content doesn't change, so plainTextContent is carried over.
-          Note updatedNote = Note(
-            id: currentNote.id,
-            title: currentNote.title,
-            content: currentNote.content,
-            plainTextContent: currentNote.plainTextContent, // Carry over existing plainTextContent
-            category: currentNote.category,
-            createdAt: currentNote.createdAt,
-            modifiedAt: DateTime.now(),
-            isArchived: currentNote.isArchived,
-            isPinned: currentNote.isPinned,
+      int index = _allNotes.indexWhere((n) => n.id == id);
+      if (index != -1) {
+        Note originalNote = _allNotes[index];
+        if (originalNote.isLocked != lock) {
+          Note updatedNote = originalNote.copyWith(
             isLocked: lock,
-            colorValue: currentNote.colorValue,
+            modifiedAt: DateTime.now(),
           );
-          await DatabaseHelper.instance.updateNote(updatedNote);
+           _allNotes[index] = updatedNote; // Optimistic
+           await DatabaseHelper.instance.updateNote(updatedNote); // DB update follows
         }
-      } catch (e) { /* Error finding or updating note */ }
+      }
     }
-    _clearLastDeleted();
-    _clearLastArchived();
-    clearSelection(); 
-    await loadNotes(); 
+    _sortNotes();
+    notifyListeners();
   }
 
   Future<void> lockSelectedNotes() async {
@@ -386,139 +456,126 @@ class NoteProvider with ChangeNotifier {
   }
 
   Future<void> unlockAllNotes() async {
-    List<Note> notesToUnlock = _allNotes.where((note) => note.isLocked).toList();
-    if (notesToUnlock.isEmpty) return;
+    List<Note> notesToActuallyUnlock = _allNotes.where((note) => note.isLocked).toList();
+    if (notesToActuallyUnlock.isEmpty) return;
 
-    for (Note currentNote in notesToUnlock) {
-      // For unlocking, content doesn't change, so plainTextContent is carried over.
-      Note updatedNote = Note(
-        id: currentNote.id,
-        title: currentNote.title,
-        content: currentNote.content,
-        plainTextContent: currentNote.plainTextContent, // Carry over existing plainTextContent
-        category: currentNote.category,
-        createdAt: currentNote.createdAt,
-        modifiedAt: DateTime.now(),
-        isArchived: currentNote.isArchived,
-        isPinned: currentNote.isPinned,
-        isLocked: false,
-        colorValue: currentNote.colorValue,
-      );
-      await DatabaseHelper.instance.updateNote(updatedNote);
+    for (Note currentNote in notesToActuallyUnlock) {
+      int index = _allNotes.indexWhere((n) => n.id == currentNote.id);
+      if(index != -1) {
+        Note updatedNote = currentNote.copyWith(
+          isLocked: false,
+          modifiedAt: DateTime.now(),
+        );
+        _allNotes[index] = updatedNote; // Optimistic
+        await DatabaseHelper.instance.updateNote(updatedNote);
+      }
     }
-    _clearLastDeleted();
-    _clearLastArchived();
-    await loadNotes(); 
+    _sortNotes();
+    notifyListeners();
   }
 
   Future<void> pinSelectedNotes() async {
     if (selectedNoteIds.isEmpty) return;
     List<String> idsToPin = List.from(selectedNoteIds);
-    bool changed = false;
-    for (String noteId in idsToPin) {
-      try {
-        final originalNote = _allNotes.firstWhere((n) => n.id == noteId);
-        if (!originalNote.isPinned) {
-          // For pinning, content doesn't change, so plainTextContent is carried over.
-          final Note updatedNote = Note(
-            id: originalNote.id,
-            title: originalNote.title,
-            content: originalNote.content,
-            plainTextContent: originalNote.plainTextContent, // Carry over existing plainTextContent
-            category: originalNote.category,
-            createdAt: originalNote.createdAt,
-            modifiedAt: DateTime.now(), 
-            isArchived: originalNote.isArchived,
-            isPinned: true,
-            isLocked: originalNote.isLocked,
-            colorValue: originalNote.colorValue,
-          );
-          await DatabaseHelper.instance.updateNote(updatedNote);
-          changed = true;
-        }
-      } catch (e) { /* Note not found */ }
-    }
+    _clearSelection();
+    notifyListeners();
 
-    if (changed) {
-      _clearLastDeleted();
-      _clearLastArchived();
-      await loadNotes();
+    for (String noteId in idsToPin) {
+      int index = _allNotes.indexWhere((n) => n.id == noteId);
+      if (index != -1) {
+        Note originalNote = _allNotes[index];
+        if (!originalNote.isPinned) {
+          Note updatedNote = originalNote.copyWith(
+            isPinned: true,
+            modifiedAt: DateTime.now(),
+          );
+          _allNotes[index] = updatedNote;
+          await DatabaseHelper.instance.updateNote(updatedNote);
+        }
+      }
     }
-    clearSelection(); 
+    _sortNotes();
+    notifyListeners();
   }
 
   Future<void> unpinSelectedNotes() async {
     if (selectedNoteIds.isEmpty) return;
     List<String> idsToUnpin = List.from(selectedNoteIds);
-    bool changed = false;
+    _clearSelection();
+    notifyListeners();
 
     for (String noteId in idsToUnpin) {
-      try {
-        final originalNote = _allNotes.firstWhere((n) => n.id == noteId);
+      int index = _allNotes.indexWhere((n) => n.id == noteId);
+      if (index != -1) {
+        Note originalNote = _allNotes[index];
         if (originalNote.isPinned) {
-          // For unpinning, content doesn't change, so plainTextContent is carried over.
-          final Note updatedNote = Note(
-            id: originalNote.id,
-            title: originalNote.title,
-            content: originalNote.content,
-            plainTextContent: originalNote.plainTextContent, // Carry over existing plainTextContent
-            category: originalNote.category,
-            createdAt: originalNote.createdAt,
-            modifiedAt: DateTime.now(),
-            isArchived: originalNote.isArchived,
+          Note updatedNote = originalNote.copyWith(
             isPinned: false,
-            isLocked: originalNote.isLocked,
-            colorValue: originalNote.colorValue,
+            modifiedAt: DateTime.now(),
           );
+          _allNotes[index] = updatedNote;
           await DatabaseHelper.instance.updateNote(updatedNote);
-          changed = true;
         }
-      } catch (e) { /* Note not found */ }
+      }
     }
-
-    if (changed) {
-      _clearLastDeleted();
-      _clearLastArchived();
-      await loadNotes();
-    }
-    clearSelection();
+    _sortNotes();
+    notifyListeners();
   }
   
   Future<void> setColorForSelectedNotes(int? colorValue) async {
     if (_selectedNoteIds.isEmpty) return;
 
     final List<String> idsToProcess = List.from(_selectedNoteIds);
-    bool changed = false;
-
+    _clearSelection();
+    notifyListeners();
+    
     for (String id in idsToProcess) {
-      try {
-        final originalNote = _allNotes.firstWhere((n) => n.id == id);
-        if (originalNote.colorValue != colorValue) {
-          // For setting color, content doesn't change, so plainTextContent is carried over.
-          Note updatedNote = Note(
-            id: originalNote.id,
-            title: originalNote.title,
-            content: originalNote.content,
-            plainTextContent: originalNote.plainTextContent, // Carry over existing plainTextContent
-            category: originalNote.category,
-            createdAt: originalNote.createdAt,
-            modifiedAt: DateTime.now(),
-            isArchived: originalNote.isArchived,
-            isPinned: originalNote.isPinned,
-            isLocked: originalNote.isLocked,
-            colorValue: colorValue,
-          );
-          await DatabaseHelper.instance.updateNote(updatedNote);
-          changed = true;
-        }
-      } catch (e) { /* Note not found */ }
+      int index = _allNotes.indexWhere((n) => n.id == id);
+      if (index != -1) {
+        Note originalNote = _allNotes[index];
+         if (originalNote.colorValue != colorValue) {
+            Note updatedNote = originalNote.copyWith(
+              colorValue: colorValue,
+              modifiedAt: DateTime.now(),
+            );
+           _allNotes[index] = updatedNote;
+           await DatabaseHelper.instance.updateNote(updatedNote);
+         }
+      }
     }
+    _sortNotes();
+    notifyListeners();
+  }
+}
 
-    if (changed) {
-      _clearLastDeleted();
-      _clearLastArchived();
-      await loadNotes();
-    }
-    clearSelection();
+// Added copyWith to Note model for easier updates
+extension NoteCopyWith on Note {
+  Note copyWith({
+    String? id,
+    String? title,
+    String? content,
+    String? plainTextContent,
+    String? category,
+    DateTime? createdAt,
+    DateTime? modifiedAt,
+    bool? isArchived,
+    bool? isPinned,
+    bool? isLocked,
+    int? colorValue,
+    bool clearColorValue = false, // Added to explicitly set colorValue to null
+  }) {
+    return Note(
+      id: id ?? this.id,
+      title: title ?? this.title,
+      content: content ?? this.content,
+      plainTextContent: plainTextContent ?? this.plainTextContent,
+      category: category ?? this.category,
+      createdAt: createdAt ?? this.createdAt,
+      modifiedAt: modifiedAt ?? this.modifiedAt,
+      isArchived: isArchived ?? this.isArchived,
+      isPinned: isPinned ?? this.isPinned,
+      isLocked: isLocked ?? this.isLocked,
+      colorValue: clearColorValue ? null : (colorValue ?? this.colorValue),
+    );
   }
 }
