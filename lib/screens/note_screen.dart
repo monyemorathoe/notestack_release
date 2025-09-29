@@ -438,7 +438,8 @@ class NoteScreenState extends State<NoteScreen> {
     
     final int wordCount = _getWordCount(); // Calculate word count for the build
     final TextStyle? bottomTextStyle = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurface.withAlpha((0.75 * 255).round())
+      color: theme.colorScheme.onSurface.withAlpha((0.75 * 255).round()),
+      fontWeight: FontWeight.w500 // MODIFIED
     );
 
     return Scaffold(
