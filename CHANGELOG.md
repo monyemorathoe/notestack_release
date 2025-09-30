@@ -1,9 +1,16 @@
-# Changelog
+# NoteStack v1.0.0 - Changelog
 
-## [11.4.2] - 2025-09-25
-- Upgraded to flutter_quill: ^11.4.2
-- Updated note screen to use new Quill API
-- Added localization delegates for Flutter Quill
-- Fixed all deprecations and errors for Flutter 3.x
-- Improved color picker and category selection
+This release focuses on **improving core functionalities**, addressing internal code quality, and preparing for the **Windows release**.
 
+---
+
+## ✨ New Features & Enhancements
+
+### Improved Note Sharing
+- Updated the sharing mechanism to use **SharePlus** for better compatibility and correct plain text sharing.  
+- **Single Note Sharing:** Both the title and full plain text content of the note are now included.  
+- **Multiple Note Sharing:** A summary list of note titles is provided for clarity.
+
+### Enhanced Swipe Actions for Locked Notes (Home Screen)
+- Locked notes can now be **archived conveniently using a swipe gesture**.  
+- To maintain security, **swiping to delete locked notes remains disabled**.
