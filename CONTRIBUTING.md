@@ -26,7 +26,7 @@ Please review this document to make the contribution process smooth and effectiv
 
 ### Reporting Bugs
 
-Bugs are tracked as [GitHub Issues](https://github.com/[YourGitHubUsername]/[YourRepositoryName]/issues). Before opening a new issue, please check if the bug has already been reported.
+Bugs are tracked as [GitHub Issues](https://github.com/monyemorathoe/notestack_release/issues). Before opening a new issue, please check if the bug has already been reported.
 
 Include as much detail as possible in your bug report:
 
@@ -43,7 +43,7 @@ Include as much detail as possible in your bug report:
 
 ### Suggesting Enhancements or New Features
 
-Enhancement requests are also tracked as [GitHub Issues](https://github.com/[YourGitHubUsername]/[YourRepositoryName]/issues).
+Enhancement requests are also tracked as [GitHub Issues](https://github.com/monyemorathoe/notestack_release/issues).
 
 When suggesting a new feature:
 
@@ -58,8 +58,8 @@ When suggesting a new feature:
 
 Unsure where to begin? Look at `good first issue` or `help wanted` issues:
 
-- [Good first issues](https://github.com/[YourGitHubUsername]/[YourRepositoryName]/labels/good%20first%20issue)
-- [Help wanted issues](https://github.com/[YourGitHubUsername]/[YourRepositoryName]/labels/help%20wanted)
+- [Good first issues](https://github.com/monyemorathoe/notestack_release/labels/good%20first%20issue)
+- [Help wanted issues](https://github.com/monyemorathoe/notestack_release/labels/help%20wanted)
 
 ---
 
