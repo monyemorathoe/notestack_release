@@ -1,102 +1,57 @@
-# Flutter Quill Integration in NoteStack
+# NoteStack v1.0.0 for Windows - Initial Release! 🚀
 
-NoteStack uses [Flutter Quill](https://pub.dev/packages/flutter_quill) as its rich text editor for modern Android, iOS, web, and desktop platforms.
+Welcome to the inaugural public release of **NoteStack** for Windows!  
 
-## 📦 Installation
+**NoteStack** is a versatile and user-friendly note-taking application designed to help you capture, organize, and manage your thoughts, ideas, and tasks efficiently and securely. With features like note locking for enhanced privacy and a modern, responsive interface built with **Flutter**, NoteStack is perfect for both personal and professional use.
 
-Add the dependency in your `pubspec.yaml`:
+---
 
-```yaml
-dependencies:
-  flutter_quill: ^11.4.2
-```
+## ✨ Key Features in v1.0.0
 
-Then run:
+- **Rich Text Note Editing**  
+  Create beautiful and detailed notes with a comprehensive suite of formatting tools (bold, italics, lists, etc.) powered by the Quill rich text editor.  
 
-```
-flutter pub get
-```
+- **Intuitive Note Organization**  
+  - Categorize notes for easy filtering (e.g., Personal, Work, Ideas)  
+  - Pin important notes to keep them at the top  
+  - Archive notes you want to keep but don’t need in your main view  
 
-## 🛠 Platform Setup
+- **Secure Note Locking**  
+  Protect sensitive notes with application-wide password protection.  
 
-### Android (Optional: For image clipboard sharing)
+- **Integrated Checklist Management**  
+  Create and manage separate checklists for your tasks and to-dos.  
 
-1. In `android/app/src/main/AndroidManifest.xml`, inside `<application>`, add:
+- **Customizable Appearance**  
+  Switch between Light, Dark, and System themes.  
 
-```xml
-<provider
-    android:name="androidx.core.content.FileProvider"
-    android:authorities="${applicationId}.fileprovider"
-    android:exported="false"
-    android:grantUriPermissions="true" >
-    <meta-data
-        android:name="android.support.FILE_PROVIDER_PATHS"
-        android:resource="@xml/file_paths" />
-</provider>
-```
+- **Flexible Note Views**  
+  Toggle between a compact grid view and a detailed list view for your notes.  
 
-2. Create `android/app/src/main/res/xml/file_paths.xml`:
+- **Search Functionality**  
+  Quickly find the notes you’re looking for.  
 
-```xml
-<paths>
-    <cache-path name="cache" path="." />
-</paths>
-```
+- **Data Persistence**  
+  All notes and checklists are stored locally on your machine for offline access.  
 
-## 🚀 Usage
+---
 
-### Localization
+## 💾 Installation Instructions
 
-Add the following to your `MaterialApp`:
+1. Download the `NoteStack_Setup_v1.0.0.exe` installer from the **Assets** section below.  
+2. Run the installer.  
+3. Follow the on-screen prompts to complete the installation.  
 
-```dart
-import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
+---
 
-MaterialApp(
-  localizationsDelegates: const [
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    FlutterQuillLocalizations.delegate,
-  ],
-  supportedLocales: const [
-    Locale('en'),
-    // Add more locales as needed
-  ],
-);
-```
+## 📣 Feedback and Contributions
 
-### Editor Example
+- **Found a bug?** Please open an [issue](#).  
+- **Have a feature request?** We'd love to hear it! Open an issue with your ideas.  
+- **Want to contribute?** Check out our `CONTRIBUTING.md` (if available) or reach out to the team.  
 
-```dart
-final QuillController _controller = QuillController.basic();
+Thank you for trying **NoteStack**! We hope it helps you stay organized, productive, and inspired.  
 
-QuillSimpleToolbar(
-  controller: _controller,
-  config: const QuillSimpleToolbarConfig(),
-),
-Expanded(
-  child: QuillEditor.basic(
-    controller: _controller,
-    config: const QuillEditorConfig(),
-  ),
-)
-```
+---
 
-### Saving and Loading Content
-
-```dart
-// Save
-final String json = jsonEncode(_controller.document.toDelta().toJson());
-
-// Load
-_controller.document = Document.fromJson(jsonDecode(json));
-```
-
-## 📝 Changelog
-See [CHANGELOG.md](CHANGELOG.md) for version history.
-
-## 📜 License
-MIT
-
+*Built with ❤️ using Flutter*
