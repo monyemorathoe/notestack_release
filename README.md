@@ -46,7 +46,7 @@ Welcome to the inaugural public release of **NoteStack** for Windows!
 
 ## 📣 Feedback and Contributions
 
-- **Found a bug?** Please open an [issue](#).  
+- **Found a bug?** Please open an [issue](https://github.com/monyemorathoe/notestack_release/issues).  
 - **Have a feature request?** We'd love to hear it! Open an issue with your ideas.  
 - **Want to contribute?** Check out our `CONTRIBUTING.md` (if available) or reach out to the team.  
 
