@@ -40,7 +40,11 @@ Welcome to the inaugural public release of **NoteStack** for Windows!
 
 1. Download the `NoteStack_Setup_v1.0.0.exe` installer from the **Assets** section below.  
 2. Run the installer.  
-3. Follow the on-screen prompts to complete the installation.  
+3. Follow the on-screen prompts to complete the installation.
+
+Important Note: The installer is not yet code-signed, so Windows SmartScreen may display a warning. This is normal for new unsigned apps. To proceed safely, click "More info" > "Run anyway." We're addressing this by preparing official store releases (see below) for better trust and seamless installation.
+
+
 
 ---
 
@@ -54,4 +58,13 @@ Thank you for trying **NoteStack**! We hope it helps you stay organized, product
 
 ---
 
+## 🌐 Coming Soon to the following Platforms:
+
+| Platform | |
+|----------|----------------|
+| <img src="https://upload.wikimedia.org/wikipedia/commons/1/1b/Apple_logo_grey.svg" width="40"> | Apple Store |
+| <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" width="40"> | Microsoft Store |
+| <img src="https://www.svgrepo.com/show/452223/google-play.svg" width="40"> | Google Play |
+
 *Built with ❤️ using Flutter*
+
