@@ -62,9 +62,10 @@ Thank you for trying **NoteStack**! We hope it helps you stay organized, product
 
 | Platform | |
 |----------|----------------|
-| <img src="https://upload.wikimedia.org/wikipedia/commons/1/1b/Apple_logo_grey.svg" width="40"> | Apple Store |
+| <img src="https://upload.wikimedia.org/wikipedia/commons/6/67/App_Store_%28iOS%29.svg" width="40"> | App Store |
 | <img src="https://upload.wikimedia.org/wikipedia/commons/4/44/Microsoft_logo.svg" width="40"> | Microsoft Store |
 | <img src="https://www.svgrepo.com/show/452223/google-play.svg" width="40"> | Google Play |
+
 
 *Built with ❤️ using Flutter*
 
